@@ -21,3 +21,11 @@
 --   is_admin(), is_team_member(), my_role(), admin_setup_needed(), claim_first_admin(email, code)
 --   add_team_member(email, role), set_team_member_access(user_id, role, active), list_team()
 --   add_admin(email)  -- older name, adds a full admin
+
+-- WhatsApp automation (BotCommerce webhook workflows), sent server-side with pg_net
+--   private.automation (single row: webhook URLs, on/off switches, team numbers)
+--   private.automation_log (every send, joined with net._http_response for status)
+--   trigger leads_whatsapp_automation (after insert on leads): welcome to lead + alert to team
+--   rpc: get_automation(), save_automation(jsonb), send_automation_sample(kind, phone),
+--        send_offer_reminders(lead_ids, offer_slug)  -- opted-in leads only
+--        automation_log(limit)

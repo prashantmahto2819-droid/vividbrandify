@@ -232,6 +232,12 @@
         return { ok: true };
       }
 
+      case "GET automation": return (await rpc("get_automation", {})) || {};
+      case "PUT automation": return await rpc("save_automation", { p: body });
+      case "POST automation-sample": return { requestId: await rpc("send_automation_sample", { p_kind: body.kind, p_phone: body.phone }) };
+      case "GET automation-log": return (await rpc("automation_log", { p_limit: 50 })) || [];
+      case "POST reminders": return { sent: await rpc("send_offer_reminders", { p_lead_ids: body.ids, p_offer_slug: body.offer }) };
+
       case "GET backup": {
         const [content, leads, media] = await Promise.all([getContent(), call("GET", "leads"), listMedia().catch(() => [])]);
         return { content, leads, media, exportedAt: new Date().toISOString() };

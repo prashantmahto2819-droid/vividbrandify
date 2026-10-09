@@ -31,6 +31,16 @@ From then on, every change pushed to `main` goes live automatically within about
 | `supabase/schema-notes.sql` | Notes on the database tables, access rules and functions |
 | `docs/SETUP-GUIDE.md` | First-time setup, domain, and the "Turn on delete" SQL |
 
+## WhatsApp automation (BotCommerce)
+
+Admin → **WhatsApp → Automation** connects BotCommerce webhook workflows:
+
+- **Welcome message** to every new lead from the website
+- **New-lead alert** to the team's WhatsApp numbers
+- **Offer reminders** to opted-in leads, sent from Leads → Message leads
+
+For each one: create an approved template and a Webhook Workflow in BotCommerce, paste the Webhook Callback URL, save, click **Send sample**, then **Capture Webhook Response** in BotCommerce and map `phone` and the template variables. The webhook URLs are stored in Supabase and never reach the browser.
+
 ## Editing content
 
 Content isn't stored in this repository. Slides, services, offers, blog posts and settings are edited in the admin panel and saved in Supabase, so they change instantly without a deploy. Only code changes go through this repository.

@@ -67,7 +67,7 @@
     ["", [["dashboard", "Dashboard"]]],
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
     ["Layout", [["sections"]]],
-    ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"]]],
+    ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
     ["Site", [["settings"], ["theme"], ["seo"]]],
     ["Advanced", [["code"], ["media", "Media library"], ["account", "Account & backup"]]],
   ];
@@ -75,7 +75,7 @@
   const STAFF_NAV = [["", [["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"]]], ["You", [["account", "My account"]]]];
   const STAFF_VIEWS = ["dashboard", "leads", "account"];
   const labelOf = v => (isStaff() && v === "account") ? "My account" : baseLabel(v);
-  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget" })[v] || v;
+  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation" })[v] || v;
 
   function renderShell() {
     const newLeads = S.leads.filter(l => l.status === "new").length;
@@ -102,6 +102,7 @@
     if (S.view === "leads") return renderLeads(c);
     if (S.view === "media") return renderMedia(c);
     if (S.view === "account") return renderAccount(c);
+    if (S.view === "automation") return renderAutomation(c);
     if (sc) {
       if (!S.draft) S.draft = clone(S.content[S.view]);
       if (sc.kind === "list") renderListEditor(c, sc); else renderObjectEditor(c, sc);
@@ -293,6 +294,51 @@
   }
   function download(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 
+  /* ---------- WhatsApp automation (BotCommerce webhook workflows) ---------- */
+  const AUTO_FIELDS = [["phone", "Who receives the message (digits with country code, no +)"], ["first_name", "Customer's first name"], ["name", "Customer's full name"], ["lead_phone", "Customer's WhatsApp number"], ["email", "Customer's email"], ["business", "Business name"], ["service", "What they asked about"], ["message", "Their message"], ["source", "Where the enquiry came from"], ["offer_title", "Offer name"], ["offer_discount", "Offer highlight (reminders)"], ["offer_valid_till", "Offer end date (reminders)"], ["offer_link", "Link to the offer page"], ["brand", "Your brand name"], ["site_url", "Your website address"], ["received_at", "When the enquiry arrived"]];
+  const AUTO_KINDS = [
+    { k: "welcome", title: "Welcome message to new leads", when: "Sent the moment someone submits a form on the website.", tpl: "Hi {{1}}, thanks for contacting {{2}}! We've received your enquiry about {{3}}. Our team will call you shortly.", vars: "{{1}} = first_name, {{2}} = brand, {{3}} = service" },
+    { k: "alert", title: "New-lead alert to your team", when: "Sent to the numbers below whenever a new enquiry arrives.", tpl: "New enquiry: {{1}} ({{2}}) is interested in {{3}}. Source: {{4}}. Message: {{5}}", vars: "{{1}} = name, {{2}} = lead_phone, {{3}} = service, {{4}} = source, {{5}} = message" },
+    { k: "reminder", title: "Offer reminders", when: "Sent from Leads → Message leads → Send via BotCommerce, only to leads who opted in.", tpl: "Hi {{1}}, {{2}} is on now: {{3}}. Valid till {{4}}. See details: {{5}}", vars: "{{1}} = first_name, {{2}} = offer_title, {{3}} = offer_discount, {{4}} = offer_valid_till, {{5}} = offer_link" },
+  ];
+  async function renderAutomation(c) {
+    if (isStaff()) { c.innerHTML = '<div class="empty">Only admins can change automation.</div>'; return; }
+    c.innerHTML = '<div class="boot">Loading…</div>';
+    let cfg = {}, log = [];
+    try { [cfg, log] = await Promise.all([api("GET", "automation"), api("GET", "automation-log").catch(() => [])]); }
+    catch (err) { c.innerHTML = '<div class="empty">' + esc(err.message) + '</div>'; return; }
+    const card = a => '<div class="card auto-card"><div class="auto-h"><h2>' + esc(a.title) + '</h2><label class="chk" for="a_' + a.k + '_on"><input type="checkbox" id="a_' + a.k + '_on"' + (cfg[a.k + "_on"] ? " checked" : "") + '><span>On</span></label></div><p class="help">' + esc(a.when) + '</p>' +
+      '<div class="fld"><label for="a_' + a.k + '_url">BotCommerce Webhook Callback URL</label><input type="text" id="a_' + a.k + '_url" value="' + esc(cfg[a.k + "_url"] || "") + '" placeholder="https://…"></div>' +
+      (a.k === "alert" ? '<div class="fld"><label for="a_alert_numbers">Team WhatsApp numbers</label><textarea id="a_alert_numbers" rows="2" placeholder="98765 43210, 91234 56789">' + esc(cfg.alert_numbers || "") + '</textarea><span class="hint">Separate numbers with a comma or a new line</span></div>' : '') +
+      (a.k === "welcome" ? '<label class="chk" for="a_welcome_optin_only"><input type="checkbox" id="a_welcome_optin_only"' + (cfg.welcome_optin_only ? " checked" : "") + '><span>Only send to leads who ticked the WhatsApp box<span class="hint">Leave unticked to reply to every enquiry that has a phone number</span></span></label>' : '') +
+      '<details class="auto-tpl"><summary>Suggested BotCommerce template</summary><div class="msg-preview">' + esc(a.tpl) + '</div><p class="help" style="font-size:13px">Map the variables: ' + esc(a.vars) + '. Map the recipient to <b>phone</b>.</p></details>' +
+      '<div class="auto-sample"><input type="tel" id="a_' + a.k + '_test" placeholder="Your WhatsApp number" aria-label="Number to receive the sample"><button class="btn btn-s btn-sm" data-asample="' + a.k + '">Send sample</button></div></div>';
+    c.innerHTML = '<div class="card"><h2>How this works</h2><ol class="auto-steps">' +
+        '<li>In BotCommerce: <b>Bot Manager → Message Template</b>, create a template and get it approved by WhatsApp.</li>' +
+        '<li>Open <b>Webhook Workflow</b>, choose your WhatsApp number and the template, click <b>Create Workflow</b> and copy the <b>Webhook Callback URL</b>.</li>' +
+        '<li>Paste it below, tick <b>On</b> and click <b>Save</b>.</li>' +
+        '<li>Click <b>Send sample</b>, then in BotCommerce click <b>Capture Webhook Response</b> and map <b>phone</b> and the template variables. Save the workflow.</li></ol>' +
+        '<p class="help">Messages go from your server to BotCommerce, so the webhook links never appear on the website.</p></div>' +
+      '<div class="auto-grid">' + AUTO_KINDS.map(card).join("") + '</div>' +
+      '<div class="card"><div class="fld"><label for="a_site_url">Website address used in links</label><input type="text" id="a_site_url" value="' + esc(cfg.site_url || "") + '" placeholder="https://vividbrandify.com"><span class="hint">Leave empty to use the address from SEO & sharing</span></div><div style="margin-top:12px"><button class="btn btn-p" data-asave>Save automation</button></div></div>' +
+      '<div class="card"><h2>Fields sent to BotCommerce</h2><div class="tbl-wrap"><table class="auto-fields"><tbody>' + AUTO_FIELDS.map(([k, d]) => '<tr><td><code>' + k + '</code></td><td>' + esc(d) + '</td></tr>').join("") + '</tbody></table></div></div>' +
+      '<div class="card"><h2>Recent sends</h2>' + (log.length ? '<div class="tbl-wrap"><table><thead><tr><th>When</th><th>Type</th><th>To</th><th>Lead</th><th>Result</th></tr></thead><tbody>' + log.map(r => '<tr><td>' + new Date(r.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) + '</td><td>' + esc(r.kind) + '</td><td>+' + esc(r.phone) + '</td><td>' + esc(r.lead_name) + '</td><td>' + (r.status == null ? (r.error ? '<span class="tagp warn">' + esc(r.error.slice(0, 60)) + '</span>' : '<span class="tagp off">sending…</span>') : r.status < 300 ? '<span class="tagp live">delivered to BotCommerce</span>' : '<span class="tagp warn">error ' + r.status + '</span>') + '</td></tr>').join("") + '</tbody></table></div>' : '<p class="help">Nothing sent yet.</p>') + '</div>';
+    const read = () => ({
+      welcome_on: $c("a_welcome_on").checked, welcome_url: $c("a_welcome_url").value.trim(), welcome_optin_only: $c("a_welcome_optin_only").checked,
+      alert_on: $c("a_alert_on").checked, alert_url: $c("a_alert_url").value.trim(), alert_numbers: $c("a_alert_numbers").value.trim(),
+      reminder_on: $c("a_reminder_on").checked, reminder_url: $c("a_reminder_url").value.trim(), site_url: $c("a_site_url").value.trim(),
+    });
+    c.querySelector("[data-asave]").addEventListener("click", async () => {
+      try { await api("PUT", "automation", read()); toast("Automation saved."); } catch (err) { toast(err.message, true); }
+    });
+    c.querySelectorAll("[data-asample]").forEach(b => b.addEventListener("click", async () => {
+      const k = b.dataset.asample;
+      try { await api("PUT", "automation", read()); await api("POST", "automation-sample", { kind: k, phone: $c("a_" + k + "_test").value }); toast("Sample sent. Now click Capture Webhook Response in BotCommerce."); setTimeout(() => renderAutomation(c), 4000); }
+      catch (err) { toast(err.message, true); }
+    }));
+  }
+  const $c = id => document.getElementById(id);
+
   /* ---------- message leads (offer reminders) ---------- */
   function openMessenger() {
     const offers = (S.content.offers || []).filter(o => o.published);
@@ -327,6 +373,7 @@
           (list.length ? '<div class="msg-rows">' + list.map(l => '<div class="msg-row' + (M.sent.has(l.id) ? " done" : "") + '"><span><b>' + esc(l.name) + '</b><small>+' + esc(waNum(l.phone)) + (l.lastMessageAt ? ' · last messaged ' + new Date(l.lastMessageAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : '') + '</small></span>' +
             (M.sent.has(l.id) ? '<span class="tagp live">Sent ✓</span>' : '<a class="btn btn-p btn-sm" target="_blank" rel="noopener" data-msend="' + l.id + '" href="https://wa.me/' + waNum(l.phone) + '?text=' + encodeURIComponent(fill(M.text, l)) + '">Send on WhatsApp</a>') + '</div>').join("") + '</div>'
             : '<div class="empty">No leads match. ' + (M.audience === "optin" ? "Only leads who ticked the WhatsApp box on a form are included." : "") + '</div>') +
+          (M.offer && list.length ? '<div class="bc-send"><b>Send automatically via BotCommerce</b><p class="help" style="font-size:13px">Uses your approved offer-reminder template. Goes only to the ' + list.filter(l => l.optIn).length + ' opted-in lead' + (list.filter(l => l.optIn).length === 1 ? '' : 's') + ' in this list.</p>' + (M.confirm ? '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p btn-sm" data-bcgo>Yes, send now</button><button class="btn btn-g btn-sm" data-bcno>Cancel</button></div>' : '<button class="btn btn-s btn-sm" data-bcsend' + (list.some(l => l.optIn) ? '' : ' disabled') + '>Send to ' + list.filter(l => l.optIn).length + ' via BotCommerce</button>') + '</div>' : '') +
           (list.length ? '<p class="help" style="font-size:13px;margin-top:8px">Preview for ' + esc(list[0].name) + ':</p><div class="msg-preview">' + esc(fill(M.text, list[0])).replace(/\n/g, "<br>") + '</div>' : '') +
         '</div></div></div>';
     }
@@ -350,6 +397,18 @@
         try { const l = await api("PATCH", "leads/" + id, { messaged: true }); Object.assign(S.leads.find(x => x.id === id), l); } catch (err) { toast(err.message, true); }
         setTimeout(draw, 300);
         return;
+      }
+      if (e.target.closest("[data-bcsend]")) { M.confirm = true; draw(); return; }
+      if (e.target.closest("[data-bcno]")) { M.confirm = false; draw(); return; }
+      if (e.target.closest("[data-bcgo]")) {
+        const ids = recipients().filter(l => l.optIn).map(l => l.id);
+        M.confirm = false;
+        try {
+          const r = await api("POST", "reminders", { ids, offer: M.offer });
+          ids.forEach(id => { M.sent.add(id); const l = S.leads.find(x => x.id === id); if (l) l.lastMessageAt = new Date().toISOString(); });
+          toast("Sent " + r.sent + " reminder" + (r.sent === 1 ? "" : "s") + " through BotCommerce.");
+        } catch (err) { toast(err.message, true); }
+        draw(); return;
       }
       if (e.target.closest("[data-mcsv]")) {
         const cell = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
