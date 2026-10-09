@@ -79,7 +79,7 @@
 
   function renderShell() {
     const newLeads = S.leads.filter(l => l.status === "new").length;
-    app.innerHTML = '<div class="shell"><aside class="side" id="side"><div class="brandmark"><span class="mark">' + TICK + '</span>' + esc((S.content.settings.brand || "Vivid Brandify")) + '</div>' +
+    app.innerHTML = '<div class="shell"><aside class="side" id="side"><div class="brandmark"><img class="mark-img" src="/assets/brand/favicon.png" alt="" width="36" height="36">' + esc((S.content.settings.brand || "Vivid Brandify")) + '</div>' +
       (isStaff() ? STAFF_NAV : NAV).map(([g, items]) => (g ? '<div class="grp">' + g + '</div>' : '') + items.map(([k, l]) => '<button data-nav="' + k + '" class="' + (S.view === k ? "on" : "") + '">' + esc(l || labelOf(k)) + (k === "leads" && newLeads ? '<span class="n">' + newLeads + '</span>' : '') + '</button>').join("")).join("") +
       '<div class="spacer"></div><div class="me">Signed in as ' + esc(S.user.email) + '<br><span class="pill" style="margin-top:6px;display:inline-block">' + (isStaff() ? "Staff" : "Admin") + '</span></div><button data-act="logout">Sign out</button></aside>' +
       '<div class="main"><div class="topbar"><button class="btn btn-g btn-sm menu-t" data-act="menu">Menu</button><h1>' + esc(labelOf(S.view)) + '</h1><div class="sp"></div><a class="btn btn-g btn-sm" id="viewSite" href="' + previewHref() + '" target="_blank" rel="noopener">View site ↗</a></div>' +
