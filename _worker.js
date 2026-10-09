@@ -128,6 +128,8 @@ export default {
     const url = new URL(request.url);
     const p = url.pathname;
     const isGet = request.method === "GET" || request.method === "HEAD";
+    // repository files that are not part of the website
+    if (/^\/(README\.md|\.gitignore|docs(\/|$)|supabase(\/|$)|\.git)/i.test(p)) return new Response("Not found", { status: 404 });
     const blog = /^\/blog\/([\w-]+)\/?$/.exec(p);
     const offerM = /^\/offer\/([\w-]+)\/?$/.exec(p);
     const isPage = isGet && (p === "/" || !!blog || !!offerM);
