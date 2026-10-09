@@ -7,7 +7,7 @@
   const clone = o => JSON.parse(JSON.stringify(o));
   const TICK = '<svg viewBox="0 0 18 11"><path d="M1 6l3.5 3.5L11 2"/><path d="M7 9.5L15.5 1"/></svg>';
 
-  const S = { user: null, schema: null, content: null, view: "dashboard", sel: null, draft: null, dirty: false, leads: [], media: [], dash: null, pendingDel: null, leadFilter: { q: "", status: "" } };
+  const S = { user: null, schema: null, content: null, view: "dashboard", sel: null, draft: null, dirty: false, leads: [], media: [], dash: null, pendingDel: null, leadFilter: { q: "", status: "", type: "", service: "" } };
 
   /* ---------- API ---------- */
   async function api(method, path, body) {
@@ -271,14 +271,24 @@
   const kpi = (n, l, nav) => '<button class="card kpi" data-nav="' + nav + '" style="text-align:left;cursor:pointer"><b>' + n + '</b><span>' + esc(l) + '</span></button>';
 
   /* ---------- leads ---------- */
+  // Distinct values seen on leads, plus the categories offered on the website, so filters list every option.
+  function leadValues(k) {
+    const st = (S.content && S.content.settings) || {}, base = [];
+    if (k === "businessType") String(st.businessTypes || "").split("\n").forEach(x => { x = x.trim(); if (x) base.push(x); });
+    if (k === "service") (S.content.services || []).forEach(v => v.name && base.push(v.name));
+    S.leads.forEach(l => { if (l[k]) base.push(l[k]); });
+    return [...new Set(base)];
+  }
   function renderLeads(c) {
     const f = S.leadFilter, q = f.q.toLowerCase();
-    const rows = S.leads.filter(l => (!f.status || l.status === f.status) && (!q || [l.name, l.phone, l.email, l.business, l.service, l.message].join(" ").toLowerCase().includes(q)));
-    c.innerHTML = '<div class="filters"><input type="search" id="lq" placeholder="Search name, phone, message…" value="' + esc(f.q) + '" aria-label="Search leads"><select id="ls" aria-label="Filter by status"><option value="">All statuses</option>' + ["new", "contacted", "won", "lost"].map(s => '<option' + (f.status === s ? " selected" : "") + '>' + s + '</option>').join("") + '</select><span class="help">' + rows.length + ' of ' + S.leads.length + '</span><span style="flex:1"></span><button class="btn btn-p btn-sm" data-act="message">Message leads</button><button class="btn btn-s btn-sm" data-act="csv">Export CSV</button></div>' +
+    const rows = S.leads.filter(l => (!f.status || l.status === f.status) && (!f.type || l.businessType === f.type) && (!f.service || l.service === f.service) && (!q || [l.name, l.phone, l.email, l.business, l.businessType, l.city, l.service, l.message].join(" ").toLowerCase().includes(q)));
+    c.innerHTML = '<div class="filters"><input type="search" id="lq" placeholder="Search name, phone, city…" value="' + esc(f.q) + '" aria-label="Search leads"><select id="ls" aria-label="Filter by status"><option value="">All statuses</option>' + ["new", "contacted", "won", "lost"].map(s => '<option' + (f.status === s ? " selected" : "") + '>' + s + '</option>').join("") + '</select>' +
+      '<select id="ltype" aria-label="Filter by business category"><option value="">All business categories</option>' + leadValues("businessType").map(v => '<option' + (f.type === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
+      '<select id="lsvc" aria-label="Filter by service"><option value="">All services</option>' + leadValues("service").map(v => '<option' + (f.service === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select><span class="help">' + rows.length + ' of ' + S.leads.length + '</span><span style="flex:1"></span><button class="btn btn-p btn-sm" data-act="message">Message leads</button><button class="btn btn-s btn-sm" data-act="csv">Export CSV</button></div>' +
       (rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Received</th><th>Contact</th><th>Interested in</th><th>Message</th><th>Status</th><th>Follow-up</th><th>Notes</th><th></th></tr></thead><tbody>' + rows.map(l => {
         const wa = l.phone ? "https://wa.me/" + waNum(l.phone) : "";
         return '<tr><td><span style="font-variant-numeric:tabular-nums">' + new Date(l.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</span><div class="sub">' + new Date(l.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) + '</div></td>' +
-          '<td><b>' + esc(l.name) + '</b>' + (l.business ? '<div class="sub">' + esc(l.business) + '</div>' : '') + (l.phone ? '<div class="sub"><a href="tel:' + esc(l.phone) + '">' + esc(l.phone) + '</a> · <a href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></div>' : '') + (l.email ? '<div class="sub"><a href="mailto:' + esc(l.email) + '">' + esc(l.email) + '</a></div>' : '') + (l.optIn ? '<div><span class="tagp live" style="margin:4px 0 0">WhatsApp opt-in</span></div>' : '') + (l.lastMessageAt ? '<div class="sub">Messaged ' + new Date(l.lastMessageAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
+          '<td><b>' + esc(l.name) + '</b>' + (l.business ? '<div class="sub">' + esc(l.business) + '</div>' : '') + (l.businessType || l.city ? '<div class="sub">' + esc([l.businessType, l.city].filter(Boolean).join(" · ")) + '</div>' : '') + (l.phone ? '<div class="sub"><a href="tel:' + esc(l.phone) + '">' + esc(l.phone) + '</a> · <a href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></div>' : '') + (l.email ? '<div class="sub"><a href="mailto:' + esc(l.email) + '">' + esc(l.email) + '</a></div>' : '') + (l.optIn ? '<div><span class="tagp live" style="margin:4px 0 0">WhatsApp opt-in</span></div>' : '') + (l.lastMessageAt ? '<div class="sub">Messaged ' + new Date(l.lastMessageAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
           '<td>' + esc(l.service) + '<div class="sub">' + esc(leadSource(l)) + '</div></td><td><div class="msg">' + esc(l.message) + '</div></td>' +
           '<td><select class="st st-' + l.status + '" data-lstatus="' + l.id + '" aria-label="Status">' + ["new", "contacted", "won", "lost"].map(s => '<option' + (s === l.status ? " selected" : "") + '>' + s + '</option>').join("") + '</select></td>' +
           '<td><input type="date" class="lead-date" data-lfollow="' + l.id + '" value="' + esc(l.followUpOn) + '" aria-label="Follow-up date"></td>' +
@@ -287,7 +297,7 @@
       }).join("") + '</tbody></table></div>' : '<div class="empty">' + (S.leads.length ? "No leads match this filter." : "No enquiries yet. Leads from the website contact form appear here.") + '</div>');
   }
   function exportCsv() {
-    const cols = ["createdAt", "name", "phone", "email", "business", "service", "message", "status", "notes", "source", "optIn", "followUpOn", "lastMessageAt"];
+    const cols = ["createdAt", "name", "phone", "email", "business", "businessType", "city", "service", "message", "status", "notes", "source", "optIn", "followUpOn", "lastMessageAt"];
     const cell = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
     const csv = [cols.join(",")].concat(S.leads.map(l => cols.map(k => cell(l[k])).join(","))).join("\r\n");
     download(new Blob(["﻿" + csv], { type: "text/csv" }), "leads-" + new Date().toISOString().slice(0, 10) + ".csv");
@@ -295,7 +305,7 @@
   function download(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 
   /* ---------- WhatsApp automation (BotCommerce webhook workflows) ---------- */
-  const AUTO_FIELDS = [["phone", "Who receives the message (digits with country code, no +)"], ["first_name", "Customer's first name"], ["name", "Customer's full name"], ["lead_phone", "Customer's WhatsApp number"], ["email", "Customer's email"], ["business", "Business name"], ["service", "What they asked about"], ["message", "Their message"], ["source", "Where the enquiry came from"], ["offer_title", "Offer name"], ["offer_discount", "Offer highlight (reminders)"], ["offer_valid_till", "Offer end date (reminders)"], ["offer_link", "Link to the offer page"], ["brand", "Your brand name"], ["site_url", "Your website address"], ["received_at", "When the enquiry arrived"]];
+  const AUTO_FIELDS = [["phone", "Who receives the message (digits with country code, no +)"], ["first_name", "Customer's first name"], ["name", "Customer's full name"], ["lead_phone", "Customer's WhatsApp number"], ["email", "Customer's email"], ["business", "Business name"], ["business_type", "Business category"], ["city", "City"], ["service", "What they asked about"], ["message", "Their message"], ["source", "Where the enquiry came from"], ["offer_title", "Offer name"], ["offer_discount", "Offer highlight (reminders)"], ["offer_valid_till", "Offer end date (reminders)"], ["offer_link", "Link to the offer page"], ["brand", "Your brand name"], ["site_url", "Your website address"], ["received_at", "When the enquiry arrived"]];
   const AUTO_KINDS = [
     { k: "welcome", title: "Welcome message to new leads", when: "Sent the moment someone submits a form on the website.", tpl: "Hi {{1}}, thanks for contacting {{2}}! We've received your enquiry about {{3}}. Our team will call you shortly.", vars: "{{1}} = first_name, {{2}} = brand, {{3}} = service" },
     { k: "alert", title: "New-lead alert to your team", when: "Sent to the numbers below whenever a new enquiry arrives.", tpl: "New enquiry: {{1}} ({{2}}) is interested in {{3}}. Source: {{4}}. Message: {{5}}", vars: "{{1}} = name, {{2}} = lead_phone, {{3}} = service, {{4}} = source, {{5}} = message" },
@@ -344,14 +354,15 @@
     const offers = (S.content.offers || []).filter(o => o.published);
     const base = ((S.content.seo && S.content.seo.siteUrl) || location.origin).replace(/\/$/, "");
     const brand = (S.content.settings && S.content.settings.brand) || "us";
-    const M = { audience: "optin", status: "", source: "", skipDays: "3", offer: "", text: "", sent: new Set() };
+    const M = { audience: "optin", status: "", source: "", type: "", service: "", city: "", skipDays: "3", offer: "", text: "", sent: new Set() };
     const offerText = o => "Hi {name}, " + (o.badge ? o.badge + " from " + brand + ": " : "") + o.title + (o.discount ? " – " + o.discount : "") + "." + (o.endDate ? " Valid till " + new Date(o.endDate + "T00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + "." : "") + "\nDetails: " + base + "/offer/" + o.slug + "\nReply YES and our team will call you.";
     const live = offers.find(o => offerStatus(o) === "live");
     if (live) { M.offer = live.slug; M.text = offerText(live); } else M.text = "Hi {name}, this is " + brand + ". ";
-    const fill = (t, l) => t.replace(/\{name\}/g, (l.name || "").split(" ")[0] || "there").replace(/\{business\}/g, l.business || "your business");
+    const fill = (t, l) => t.replace(/\{name\}/g, (l.name || "").split(" ")[0] || "there").replace(/\{business\}/g, l.business || "your business").replace(/\{city\}/g, l.city || "your city");
     function recipients() {
       const cut = Date.now() - (+M.skipDays) * 864e5;
       return S.leads.filter(l => waNum(l.phone).length >= 11 && (M.audience === "all" || l.optIn) && (!M.status || l.status === M.status) &&
+        (!M.type || l.businessType === M.type) && (!M.service || l.service === M.service) && (!M.city || (l.city || "").toLowerCase().includes(M.city.toLowerCase())) &&
         (!M.source || (M.source === "contact" ? !/^\/offer\//.test(l.source || "") : (l.source || "").startsWith("/offer/" + M.source))) &&
         (!(+M.skipDays) || !l.lastMessageAt || Date.parse(l.lastMessageAt) < cut));
     }
@@ -366,9 +377,12 @@
           '<div class="fld"><label for="mAud">Who to message</label><select id="mAud"><option value="optin"' + (M.audience === "optin" ? " selected" : "") + '>Leads who opted in to WhatsApp (' + optedIn + ')</option><option value="all"' + (M.audience === "all" ? " selected" : "") + '>All leads with a phone number</option></select>' + (M.audience === "all" ? '<span class="hint warn-text">Only message people who expect to hear from you. Unwanted messages get numbers reported and blocked.</span>' : '') + '</div>' +
           '<div class="two"><div class="fld"><label for="mSt">Status</label><select id="mSt"><option value="">Any status</option>' + ["new", "contacted", "won", "lost"].map(x => '<option' + (M.status === x ? " selected" : "") + '>' + x + '</option>').join("") + '</select></div>' +
           '<div class="fld"><label for="mSrc">Came from</label><select id="mSrc"><option value="">Anywhere</option><option value="contact"' + (M.source === "contact" ? " selected" : "") + '>Website contact form</option>' + offers.map(o => '<option value="' + esc(o.slug) + '"' + (M.source === o.slug ? " selected" : "") + '>Offer page: ' + esc(o.title) + '</option>').join("") + '</select></div></div>' +
+          '<div class="two"><div class="fld"><label for="mType">Business category</label><select id="mType"><option value="">Any category</option>' + leadValues("businessType").map(v => '<option' + (M.type === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select></div>' +
+          '<div class="fld"><label for="mSvc">Interested in</label><select id="mSvc"><option value="">Any service</option>' + leadValues("service").map(v => '<option' + (M.service === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select></div></div>' +
+          '<div class="fld"><label for="mCity">City</label><input id="mCity" type="text" placeholder="Any city" value="' + esc(M.city) + '"></div>' +
           '<div class="fld"><label for="mSkip">Skip leads messaged in the last</label><select id="mSkip">' + [["0", "Don't skip"], ["1", "1 day"], ["3", "3 days"], ["7", "7 days"], ["30", "30 days"]].map(([v, t]) => '<option value="' + v + '"' + (M.skipDays === v ? " selected" : "") + '>' + t + '</option>').join("") + '</select></div>' +
           '<div class="fld"><label for="mOffer">Start from an offer</label><select id="mOffer"><option value="">Write my own message</option>' + offers.map(o => '<option value="' + esc(o.slug) + '"' + (M.offer === o.slug ? " selected" : "") + '>' + esc(o.title) + ' (' + offerStatus(o) + ')</option>').join("") + '</select></div>' +
-          '<div class="fld"><label for="mText">Message</label><textarea id="mText" rows="6">' + esc(M.text) + '</textarea><span class="hint">{name} becomes the lead\'s first name, {business} their business name.</span></div>' +
+          '<div class="fld"><label for="mText">Message</label><textarea id="mText" rows="6">' + esc(M.text) + '</textarea><span class="hint">{name} becomes the lead\'s first name, {business} their business name, {city} their city.</span></div>' +
         '</div><div class="msg-list"><div class="msg-head"><b>' + list.length + ' lead' + (list.length === 1 ? "" : "s") + '</b><span>' + M.sent.size + ' sent</span><span style="flex:1"></span><button class="btn btn-s btn-sm" data-mcsv' + (list.length ? "" : " disabled") + '>Download CSV</button><button class="btn btn-g btn-sm" data-mcopy' + (list.length ? "" : " disabled") + '>Copy numbers</button></div>' +
           (list.length ? '<div class="msg-rows">' + list.map(l => '<div class="msg-row' + (M.sent.has(l.id) ? " done" : "") + '"><span><b>' + esc(l.name) + '</b><small>+' + esc(waNum(l.phone)) + (l.lastMessageAt ? ' · last messaged ' + new Date(l.lastMessageAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : '') + '</small></span>' +
             (M.sent.has(l.id) ? '<span class="tagp live">Sent ✓</span>' : '<a class="btn btn-p btn-sm" target="_blank" rel="noopener" data-msend="' + l.id + '" href="https://wa.me/' + waNum(l.phone) + '?text=' + encodeURIComponent(fill(M.text, l)) + '">Send on WhatsApp</a>') + '</div>').join("") + '</div>'
@@ -384,6 +398,9 @@
       if (id === "mSt") M.status = e.target.value;
       if (id === "mSrc") M.source = e.target.value;
       if (id === "mSkip") M.skipDays = e.target.value;
+      if (id === "mType") M.type = e.target.value;
+      if (id === "mSvc") M.service = e.target.value;
+      if (id === "mCity") M.city = e.target.value.trim();
       if (id === "mOffer") { M.offer = e.target.value; const o = offers.find(x => x.slug === M.offer); M.text = o ? offerText(o) : "Hi {name}, this is " + brand + ". "; }
       if (id !== "mText") draw();
     });
@@ -576,6 +593,8 @@
   app.addEventListener("change", async e => {
     const t = e.target;
     if (t.id === "ls") { S.leadFilter.status = t.value; renderView(); return; }
+    if (t.id === "ltype") { S.leadFilter.type = t.value; renderView(); return; }
+    if (t.id === "lsvc") { S.leadFilter.service = t.value; renderView(); return; }
     if (t.dataset.lstatus) {
       try { const l = await api("PATCH", "leads/" + t.dataset.lstatus, { status: t.value }); Object.assign(S.leads.find(x => x.id === l.id), l); t.className = "st st-" + l.status; toast("Status updated."); } catch (err) { toast(err.message, true); }
       return;

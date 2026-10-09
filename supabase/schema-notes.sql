@@ -29,3 +29,9 @@
 --   rpc: get_automation(), save_automation(jsonb), send_automation_sample(kind, phone),
 --        send_offer_reminders(lead_ids, offer_slug)  -- opted-in leads only
 --        automation_log(limit)
+
+-- leads.business_type and leads.city (added with the "Business category" and "City" form fields).
+-- Both are optional text up to 80 characters and are included in the automation payload
+-- as business_type and city.
+-- alter table public.leads add column if not exists business_type text not null default '' check (char_length(business_type) <= 80);
+-- alter table public.leads add column if not exists city text not null default '' check (char_length(city) <= 80);

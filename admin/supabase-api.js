@@ -91,7 +91,7 @@
   }
 
   /* ---------- leads ---------- */
-  const mapLead = l => ({ id: l.id, name: l.name, phone: l.phone, email: l.email, business: l.business, service: l.service, message: l.message, source: l.source, status: l.status, notes: l.notes, createdAt: l.created_at, optIn: !!l.opt_in, lastMessageAt: l.last_message_at || "", followUpOn: l.follow_up_on || "" });
+  const mapLead = l => ({ id: l.id, name: l.name, phone: l.phone, email: l.email, business: l.business, businessType: l.business_type || "", city: l.city || "", service: l.service, message: l.message, source: l.source, status: l.status, notes: l.notes, createdAt: l.created_at, optIn: !!l.opt_in, lastMessageAt: l.last_message_at || "", followUpOn: l.follow_up_on || "" });
 
   /* ---------- media ---------- */
   const EXT = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif", "image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico" };

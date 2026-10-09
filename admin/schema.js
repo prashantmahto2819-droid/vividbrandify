@@ -136,6 +136,7 @@ const SCHEMA = {
       ['heroNote', 'text', 'Note under the slider'],
       ['stats', 'lines', 'Numbers strip', { hint: 'One per line: value|label' }],
       ['navCta', 'text', 'Menu button label'],
+      ['businessTypes', 'lines', 'Business categories in the enquiry form', { hint: 'One per line. Visitors pick one so you know what kind of business each lead runs' }],
       ['contactButton', 'text', 'Contact form button label'],
       ['contactSuccess', 'textarea', 'Message after the form is sent'],
       ['footer', 'textarea', 'Footer text'],

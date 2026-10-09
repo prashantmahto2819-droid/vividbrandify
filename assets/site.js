@@ -157,7 +157,11 @@ function vbStart() {
     if (st.hours) ls.push(["Hours", st.hours]);
     if (st.address) ls.push(["Address", st.address]);
     $("ctLines").innerHTML = ls.map(l => '<div class="cline"><span class="k">' + esc(l[0]) + '</span>' + (l[2] ? '<a class="v" href="' + esc(l[2]) + '"' + (/^https/.test(l[2]) ? ' target="_blank" rel="noopener"' : '') + '>' + esc(l[1]) + '</a>' : '<span class="v">' + esc(l[1]).replace(/\n/g, "<br>") + '</span>') + '</div>').join("");
-    $("fSvc").innerHTML = S.services.map(v => '<option>' + esc(v.name) + '</option>').join("") + '<option>Not sure yet</option>';
+    const liveOffers = OFFERS.filter(o => offerState(o) === "live");
+    $("fSvc").innerHTML = S.services.map(v => '<option>' + esc(v.name) + '</option>').join("") +
+      (liveOffers.length ? '<optgroup label="Festival offers">' + liveOffers.map(o => '<option>' + esc(("Offer: " + o.title).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
+      '<option>Not sure yet</option>';
+    $("fType").innerHTML = typeOptions();
     $("fSubmit").textContent = st.contactButton || "Send my enquiry";
 
     const social = lines(st.social).map(l => l.split("|")).filter(p => p[1]);
@@ -211,10 +215,12 @@ function vbStart() {
   });
 
   /* ---------- enquiry forms (contact section and offer pages) ---------- */
+  const DEFAULT_TYPES = "Retail shop / Showroom\nClinic / Hospital / Pharmacy\nSchool / Coaching / Institute\nReal estate / Builder\nRestaurant / Cafe / Food\nSalon / Spa / Beauty\nGym / Fitness\nHotel / Travel\nManufacturing / Wholesale\nE-commerce / Online store\nProfessional services (CA, legal, consultant)\nAutomobile / Dealership\nEvents / Wedding\nNGO / Trust\nOther";
+  function typeOptions() { return '<option value="">Select your business</option>' + lines(st.businessTypes || DEFAULT_TYPES).map(t => '<option>' + esc(t) + '</option>').join(""); }
   async function saveLead(data) {
     if (data.website) return; // the hidden "website" field is a spam trap; bots fill it, people don't
     const C = window.VB_SUPABASE;
-    const lead = { name: String(data.name || "").trim().slice(0, 120), phone: String(data.phone || "").trim().slice(0, 30), email: String(data.email || "").trim().slice(0, 160), business: String(data.business || "").trim().slice(0, 160), service: String(data.service || "").slice(0, 120), message: String(data.message || "").trim().slice(0, 3000), source: String(data.source || "").slice(0, 200), opt_in: data.opt_in === "yes" };
+    const lead = { name: String(data.name || "").trim().slice(0, 120), phone: String(data.phone || "").trim().slice(0, 30), email: String(data.email || "").trim().slice(0, 160), business: String(data.business || "").trim().slice(0, 160), business_type: String(data.business_type || "").slice(0, 80), city: String(data.city || "").trim().slice(0, 80), service: String(data.service || "").slice(0, 120), message: String(data.message || "").trim().slice(0, 3000), source: String(data.source || "").slice(0, 200), opt_in: data.opt_in === "yes" };
     const r = await fetch(C.url + "/rest/v1/leads", { method: "POST", headers: { apikey: C.key, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify(lead) });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
@@ -233,7 +239,7 @@ function vbStart() {
       btn.disabled = true; btn.textContent = "Sending…";
       try {
         await saveLead(data);
-        const text = "Hi " + st.brand + ", I'm " + data.name + (data.business ? " from " + data.business : "") + ". I'm interested in " + data.service + "." + (data.message ? "\n\n" + data.message : "");
+        const text = "Hi " + st.brand + ", I'm " + data.name + (data.business ? " from " + data.business : "") + (data.business_type ? " (" + data.business_type + ")" : "") + (data.city ? ", " + data.city : "") + ". I'm interested in " + data.service + "." + (data.message ? "\n\n" + data.message : "");
         const wl = waLink(text);
         out.innerHTML = '<div class="ok"><p>' + esc(opts.success || st.contactSuccess || "Thanks! We'll be in touch soon.") + '</p>' + (wl ? '<div><a class="btn btn-accent btn-small" href="' + esc(wl) + '" target="_blank" rel="noopener">Also message us on WhatsApp →</a></div>' : '') + '</div>';
         form.reset();
@@ -307,6 +313,8 @@ function vbStart() {
         '<label for="ofPhone">Phone / WhatsApp<input id="ofPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel"></label>' +
         '<label for="ofEmail">Email (optional)<input id="ofEmail" name="email" type="email" autocomplete="email"></label>' +
         '<label for="ofBiz">Business name<input id="ofBiz" name="business" type="text" autocomplete="organization"></label>' +
+        '<div class="two"><label for="ofType">Business category<select id="ofType" name="business_type">' + typeOptions() + '</select></label>' +
+        '<label for="ofCity">City<input id="ofCity" name="city" type="text" autocomplete="address-level2"></label></div>' +
         '<label for="ofMsg">Anything we should know?<textarea id="ofMsg" name="message" rows="3"></textarea></label>' +
         '<label class="optin" for="ofOptin"><input type="checkbox" id="ofOptin" name="opt_in" value="yes"> Send me offers and reminders on WhatsApp</label>' +
         '<label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>' +
