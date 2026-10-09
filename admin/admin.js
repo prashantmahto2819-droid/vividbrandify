@@ -225,7 +225,7 @@
   }
   function followUpCard() {
     const due = followUpsDue();
-    return '<div class="card"><h2>Follow-ups due</h2>' + (due.length ? '<div class="check">' + due.slice(0, 8).map(l => '<div><span class="st st-' + (l.followUpOn < todayStr() ? "lost" : "contacted") + '">' + (l.followUpOn < todayStr() ? "overdue" : "today") + '</span><span style="flex:1;min-width:0"><b>' + esc(l.name) + '</b> · ' + esc(l.service) + '<br><span class="help" style="font-size:13px">' + esc(l.phone || l.email) + '</span></span>' + (l.phone ? '<a class="btn btn-g btn-sm" href="https://wa.me/' + waNum(l.phone) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') + '</div>').join("") + '</div>' : '<p class="help">Nothing due. Set a follow-up date on a lead and it shows up here on that day.</p>') + '</div>';
+    return '<div class="card"><div class="d-card-h"><h2>Follow-ups due</h2>' + (due.length ? '<span class="tagp warn">' + due.length + '</span>' : '') + '</div>' + (due.length ? '<div class="check">' + due.slice(0, 8).map(l => '<div><span class="st st-' + (l.followUpOn < todayStr() ? "lost" : "contacted") + '">' + (l.followUpOn < todayStr() ? "overdue" : "today") + '</span><span style="flex:1;min-width:0"><b>' + esc(l.name) + '</b> · ' + esc(l.service) + '<br><span class="help" style="font-size:13px">' + esc(l.phone || l.email) + '</span></span>' + (l.phone ? '<a class="btn btn-g btn-sm" href="https://wa.me/' + waNum(l.phone) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') + '</div>').join("") + '</div>' : '<p class="help">Nothing due. Set a follow-up date on a lead and it shows up here on that day.</p>') + '</div>';
   }
   function renderListEditor(c, sc) {
     const list = S.draft;
@@ -243,32 +243,143 @@
   function currentObj() { const sc = S.schema[S.view]; return sc.kind === "list" ? S.draft.find(x => x.id === S.sel) : S.draft; }
 
   /* ---------- dashboard ---------- */
-  function renderDashboard(c) {
-    if (isStaff()) return renderStaffDashboard(c);
-    const d = S.dash, ck = d.checklist, weekAgo = Date.now() - 7 * 864e5;
-    d.leads = { new: S.leads.filter(l => l.status === "new").length, week: S.leads.filter(l => Date.parse(l.createdAt) > weekAgo).length };
-    d.recent = S.leads.slice(0, 5);
+  const IC = {
+    inbox: '<svg viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5 5h14l2 8v6H3v-6z"/></svg>',
+    chart: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+    trophy: '<svg viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H4a3 3 0 0 0 4 4M16 6h4a3 3 0 0 1-4 4M12 13v4M8 21h8M9 17h6"/></svg>',
+    bell: '<svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/></svg>',
+    send: '<svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>',
+    gift: '<svg viewBox="0 0 24 24"><path d="M3 9h18v4H3zM5 13h14v8H5zM12 9v12M12 9C9 9 7 4 10 4s2 5 2 5 0-5 2-5 1 5-2 5"/></svg>',
+    edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>',
+    wa: '<svg viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.5 2 2.5 4 4.5 4.5l1.2-1.2 2 1-.5 1.7c-3.6.4-7.6-3.6-7.2-7.2l1.7-.5 1 2z"/></svg>',
+  };
+  const ico = k => '<span class="d-ic" aria-hidden="true">' + IC[k] + '</span>';
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const dayKey = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  function ago(iso) {
+    const s = (Date.now() - Date.parse(iso)) / 1000;
+    if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago"; if (s < 86400) return Math.floor(s / 3600) + " h ago";
+    if (s < 172800) return "yesterday";
+    return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  }
+  function greeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+  function leadStats() {
+    const L = S.leads, now = Date.now(), D = 864e5, t = todayStr();
+    const inLast = (from, to) => L.filter(l => { const x = now - Date.parse(l.createdAt); return x >= from * D && x < to * D; }).length;
+    const due = followUpsDue();
+    return {
+      total: L.length, fresh: L.filter(l => l.status === "new").length,
+      m30: inLast(0, 30), prev30: inLast(30, 60), today: L.filter(l => dayKey(new Date(l.createdAt)) === t).length,
+      won: L.filter(l => l.status === "won").length, lost: L.filter(l => l.status === "lost").length,
+      dueToday: due.filter(l => l.followUpOn === t).length, overdue: due.filter(l => l.followUpOn < t).length,
+      optIn: L.filter(l => l.optIn).length,
+    };
+  }
+  function delta(cur, prev) {
+    if (!prev && !cur) return '<span class="d-delta flat">No leads yet in the last 60 days</span>';
+    if (!prev) return '<span class="d-delta up">▲ New this month</span>';
+    const p = Math.round((cur - prev) / prev * 100);
+    return '<span class="d-delta ' + (p > 0 ? "up" : p < 0 ? "down" : "flat") + '">' + (p > 0 ? "▲ " : p < 0 ? "▼ " : "") + Math.abs(p) + '% vs previous 30 days</span>';
+  }
+  function trendChart() {
+    const n = S.dashRange || 30, days = [], counts = {};
+    S.leads.forEach(l => { const k = dayKey(new Date(l.createdAt)); counts[k] = (counts[k] || 0) + 1; });
+    for (let i = n - 1; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push({ d, k: dayKey(d), v: counts[dayKey(d)] || 0 }); }
+    const total = days.reduce((a, x) => a + x.v, 0), peak = Math.max(...days.map(x => x.v));
+    const top = Math.max(4, Math.ceil(peak / 4) * 4), every = n <= 7 ? 1 : window.innerWidth < 640 ? (n <= 30 ? 10 : 30) : n <= 30 ? 5 : 15;
+    const fmt = d => d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+    return '<div class="card d-chart"><div class="d-card-h"><div><h2>Enquiries</h2><p class="help"><b class="d-big">' + total + '</b> in the last ' + n + ' days' + (total ? ' · busiest day ' + peak : '') + '</p></div>' +
+      '<div class="seg" role="group" aria-label="Date range">' + [7, 30, 90].map(r => '<button data-range="' + r + '" class="' + (r === n ? "on" : "") + '" aria-pressed="' + (r === n) + '">' + r + 'D</button>').join("") + '</div></div>' +
+      '<div class="bars-wrap"><div class="y-axis">' + [top, top / 2, 0].map(v => '<span>' + v + '</span>').join("") + '</div>' +
+      '<div class="bars' + (n > 30 ? " dense" : "") + '" role="img" aria-label="Enquiries per day for the last ' + n + ' days, ' + total + ' in total">' +
+      days.map((x, i) => '<div class="bar-col" tabindex="0" data-tip="' + fmt(x.d) + ': ' + x.v + ' enquir' + (x.v === 1 ? "y" : "ies") + '"><i style="height:' + (x.v ? Math.max(3, x.v / top * 100) : 0) + '%"></i>' + ((n - 1 - i) % every === 0 ? '<small>' + (n <= 7 ? x.d.toLocaleDateString("en-IN", { weekday: "short" }) : fmt(x.d)) + '</small>' : '') + '</div>').join("") +
+      '</div></div>' + (total ? '' : '<p class="help d-empty-note">New enquiries from your website and offer pages will appear here day by day.</p>') + '</div>';
+  }
+  function pipelineCard(s) {
+    const st = ["new", "contacted", "won", "lost"], lab = { new: "New", contacted: "Contacted", won: "Won", lost: "Lost" };
+    const by = k => S.leads.filter(l => l.status === k).length;
+    const closed = s.won + s.lost;
+    return '<div class="card"><div class="d-card-h"><h2>Pipeline</h2><button class="btn btn-g btn-sm" data-nav="leads">Open leads</button></div>' +
+      '<div class="pipe">' + st.map(k => { const v = by(k); return '<button class="pipe-row" data-lf="status" data-lv="' + k + '"><span class="st st-' + k + '">' + lab[k] + '</span><span class="pipe-bar"><i class="pb-' + k + '" style="width:' + pct(v, s.total) + '%"></i></span><b>' + v + '</b></button>'; }).join("") + '</div>' +
+      '<div class="d-foot"><span><b>' + (closed ? pct(s.won, closed) : 0) + '%</b> win rate on closed leads</span><span><b>' + s.optIn + '</b> opted in to WhatsApp</span></div></div>';
+  }
+  function breakdown(title, key, empty, filterKey) {
+    const m = {};
+    S.leads.forEach(l => { const v = (key === "city" ? String(l.city || "").trim().replace(/\b\w/g, c => c.toUpperCase()) : key === "source" ? leadSource(l).replace(/^Offer page: .*/, "Festival offer pages") : l[key]) || ""; if (v) m[v] = (m[v] || 0) + 1; });
+    let rows = Object.entries(m).sort((a, b) => b[1] - a[1]);
+    if (rows.length > 6) { const rest = rows.slice(5).reduce((a, r) => a + r[1], 0); rows = rows.slice(0, 5).concat([["Other", rest]]); }
+    const max = Math.max(1, ...rows.map(r => r[1])), sum = rows.reduce((a, r) => a + r[1], 0);
+    return '<div class="card"><h2>' + esc(title) + '</h2>' + (rows.length ? '<div class="hb">' + rows.map(([k, v]) => {
+      const can = filterKey && k !== "Other";
+      return '<' + (can ? 'button data-lf="' + filterKey + '" data-lv="' + esc(k) + '"' : 'div') + ' class="hb-row" title="' + esc(k) + ': ' + v + ' (' + pct(v, sum) + '%)"><span class="hb-k">' + esc(k) + '</span><span class="hb-bar"><i style="width:' + (v / max * 100) + '%"></i></span><b>' + v + '</b></' + (can ? 'button' : 'div') + '>';
+    }).join("") + '</div>' : '<p class="help">' + esc(empty) + '</p>') + '</div>';
+  }
+  function latestCard(limit) {
+    const recent = S.leads.slice(0, limit);
+    return '<div class="card d-latest"><div class="d-card-h"><h2>Latest enquiries</h2><button class="btn btn-g btn-sm" data-nav="leads">View all</button></div>' +
+      (recent.length ? '<div class="ll">' + recent.map(l => '<div class="ll-row"><span class="av">' + esc((l.name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase()) + '</span>' +
+        '<span class="ll-main"><b>' + esc(l.name) + '</b><small>' + esc([l.businessType || l.business, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</small></span>' +
+        '<span class="ll-svc">' + esc(l.service || "–") + '</span><span class="st st-' + l.status + '">' + l.status + '</span><span class="ll-when">' + ago(l.createdAt) + '</span>' +
+        (l.phone ? '<a class="ib wa-ib" href="https://wa.me/' + waNum(l.phone) + '" target="_blank" rel="noopener" aria-label="WhatsApp ' + esc(l.name) + '">' + IC.wa + '</a>' : '<span></span>') + '</div>').join("") + '</div>'
+        : '<div class="d-empty">' + ico("inbox") + '<p>No enquiries yet. Share your website or a festival offer link on WhatsApp to get the first ones.</p></div>') + '</div>';
+  }
+  function offersCard() {
+    const list = (S.content.offers || []).map(o => Object.assign({ st: offerStatus(o) }, o)).filter(o => o.st !== "ended").sort((a, b) => (a.st === "live" ? 0 : 1) - (b.st === "live" ? 0 : 1));
+    const cnt = slug => S.leads.filter(l => (l.source || "").startsWith("/offer/" + slug)).length;
+    const left = o => { if (!o.endDate) return "No end date"; const d = Math.ceil((Date.parse(o.endDate + "T23:59:59") - Date.now()) / 864e5); return o.st === "scheduled" ? "Starts " + new Date(o.startDate + "T00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : d <= 0 ? "Ends today" : d + " day" + (d > 1 ? "s" : "") + " left"; };
+    return '<div class="card"><div class="d-card-h"><h2>Festival offers</h2><button class="btn btn-g btn-sm" data-act="newoffer">+ New offer</button></div>' +
+      (list.length ? '<div class="ofl">' + list.slice(0, 4).map(o => '<div class="ofl-row"><span class="tagp ' + (o.st === "live" ? "live" : o.st === "draft" ? "off" : "warn") + '">' + o.st + '</span><span class="ofl-main"><b>' + esc(o.title) + '</b><small>' + esc(left(o)) + ' · ' + cnt(o.slug) + ' lead' + (cnt(o.slug) === 1 ? "" : "s") + '</small></span>' +
+        (o.st === "live" ? '<a class="btn btn-g btn-sm" href="/offer/' + encodeURIComponent(o.slug) + '" target="_blank" rel="noopener">View</a>' : '<button class="btn btn-g btn-sm" data-nav="offers">Edit</button>') + '</div>').join("") + '</div>'
+        : '<div class="d-empty">' + ico("gift") + '<p>No offers running. Create one for the next festival and share its link.</p></div>') + '</div>';
+  }
+  function autoCard() {
+    const a = S.autoCfg;
+    const rows = [["welcome", "Welcome message to new leads"], ["alert", "New-lead alert to your team"], ["reminder", "Offer reminders"]];
+    return '<div class="card" id="autoCard"><div class="d-card-h"><h2>WhatsApp automation</h2><button class="btn btn-g btn-sm" data-nav="automation">Set up</button></div>' +
+      (a ? '<div class="auto-st">' + rows.map(([k, t]) => { const on = a[k + "_on"] && a[k + "_url"]; return '<div><span class="dot ' + (on ? "ok" : "off") + '"></span><span>' + t + '</span><b class="' + (on ? "on" : "") + '">' + (on ? "On" : "Off") + '</b></div>'; }).join("") + '</div>' : '<p class="help">Checking…</p>') + '</div>';
+  }
+  function healthCard() {
+    const ck = S.dash.checklist;
     const todo = [
-      [ck.whatsapp, "Add your WhatsApp number", "settings"], [ck.email, "Add your contact email", "settings"],
+      [ck.whatsapp, "WhatsApp number added", "settings"], [ck.email, "Contact email added", "settings"],
       [ck.samples === 0, ck.samples ? "Replace " + ck.samples + " sample review" + (ck.samples > 1 ? "s" : "") + " with real ones" : "Reviews are real", "testimonials"],
-      [ck.siteUrl, "Set your site address for Google", "seo"], [ck.ogImage, "Add a share image for WhatsApp and social links", "seo"],
-      [ck.indexed, "Site is visible to search engines", "seo"],
+      [ck.siteUrl, "Site address set for Google", "seo"], [ck.ogImage, "Share image for WhatsApp links", "seo"], [ck.indexed, "Visible to search engines", "seo"],
     ];
-    c.innerHTML = '<div class="grid4">' +
-      kpi(d.leads.new, "New leads", "leads") + kpi(d.leads.week, "Leads this week", "leads") + kpi(d.counts.posts, "Blog posts", "posts") + kpi(d.counts.slides, "Slides", "slides") + '</div>' +
-      '<div class="two"><div class="card"><h2>Setup checklist</h2><div class="check">' + todo.map(t => '<div><span class="dot ' + (t[0] ? "ok" : "warn") + '"></span><span style="flex:1">' + esc(t[1]) + '</span>' + (t[0] ? "" : '<button class="btn btn-g btn-sm" data-nav="' + t[2] + '">Fix</button>') + '</div>').join("") + '</div></div>' +
-      '<div class="card"><h2>Latest leads</h2>' + (d.recent.length ? '<div class="check">' + d.recent.map(l => '<div><span class="st st-' + l.status + '">' + l.status + '</span><span style="flex:1;min-width:0"><b>' + esc(l.name) + '</b> · ' + esc(l.service) + '<br><span class="help" style="font-size:13px">' + new Date(l.createdAt).toLocaleString("en-IN") + '</span></span></div>').join("") + '</div><div style="margin-top:12px"><button class="btn btn-s btn-sm" data-nav="leads">All leads →</button></div>' : '<p class="help">No enquiries yet. They appear here when someone fills in the contact form.</p>') + '</div></div>' +
-      followUpCard() +
-      '<div class="card"><h2>Quick edits</h2><div style="display:flex;gap:8px;flex-wrap:wrap">' + ["offers", "slides", "posts", "widget", "sections", "settings"].map(k => '<button class="btn btn-s btn-sm" data-nav="' + k + '">' + esc(labelOf(k)) + '</button>').join("") + '</div></div>';
+    const done = todo.filter(t => t[0]).length, p = pct(done, todo.length), C = 2 * Math.PI * 26;
+    return '<div class="card"><div class="d-card-h"><h2>Website health</h2></div><div class="health"><div class="ring" role="img" aria-label="' + done + ' of ' + todo.length + ' done"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" class="r-bg"/><circle cx="32" cy="32" r="26" class="r-fg" stroke-dasharray="' + (C * p / 100).toFixed(1) + ' ' + C.toFixed(1) + '"/></svg><b>' + done + '/' + todo.length + '</b></div>' +
+      '<div class="check">' + todo.map(t => '<div><span class="dot ' + (t[0] ? "ok" : "warn") + '"></span><span style="flex:1">' + esc(t[1]) + '</span>' + (t[0] ? "" : '<button class="btn btn-g btn-sm" data-nav="' + t[2] + '">Fix</button>') + '</div>').join("") + '</div></div></div>';
   }
-  function renderStaffDashboard(c) {
-    const weekAgo = Date.now() - 7 * 864e5, by = st => S.leads.filter(l => l.status === st).length;
-    const recent = S.leads.slice(0, 8);
-    c.innerHTML = '<p class="help">Hi ' + esc(S.user.name || S.user.email) + '. Here are the enquiries that need you.</p><div class="grid4">' +
-      kpi(by("new"), "New leads", "leads") + kpi(S.leads.filter(l => Date.parse(l.createdAt) > weekAgo).length, "Leads this week", "leads") + kpi(by("contacted"), "Contacted", "leads") + kpi(by("won"), "Won", "leads") + '</div>' + followUpCard() +
-      '<div class="card"><h2>Latest leads</h2>' + (recent.length ? '<div class="check">' + recent.map(l => '<div><span class="st st-' + l.status + '">' + l.status + '</span><span style="flex:1;min-width:0"><b>' + esc(l.name) + '</b> · ' + esc(l.service) + '<br><span class="help" style="font-size:13px">' + new Date(l.createdAt).toLocaleString("en-IN") + '</span></span></div>').join("") + '</div><div style="margin-top:12px"><button class="btn btn-p btn-sm" data-nav="leads">Open leads →</button></div>' : '<p class="help">No enquiries yet. New ones from the website appear here.</p>') + '</div>';
+  function contentCard() {
+    const c = S.dash.counts, items = [["slides", c.slides, "Slides"], ["services", c.services, "Services"], ["posts", c.posts, "Blog posts"], ["testimonials", c.reviews, "Reviews"], ["faqs", c.faqs, "FAQs"], ["media", c.media, "Images"]];
+    return '<div class="card"><div class="d-card-h"><h2>Website content</h2><a class="btn btn-g btn-sm" href="/" target="_blank" rel="noopener">View site ↗</a></div><div class="cgrid">' + items.map(([k, v, l]) => '<button data-nav="' + k + '"><b>' + v + '</b><span>' + l + '</span></button>').join("") + '</div></div>';
   }
-  const kpi = (n, l, nav) => '<button class="card kpi" data-nav="' + nav + '" style="text-align:left;cursor:pointer"><b>' + n + '</b><span>' + esc(l) + '</span></button>';
+  function heroBand(s, staff) {
+    const name = String(S.user.name || "").trim().split(/\s+/)[0] || "there";
+    const bits = [];
+    if (s.fresh) bits.push('<b>' + s.fresh + '</b> new enquir' + (s.fresh === 1 ? "y needs" : "ies need") + ' a reply');
+    if (s.dueToday + s.overdue) bits.push('<b>' + (s.dueToday + s.overdue) + '</b> follow-up' + (s.dueToday + s.overdue === 1 ? "" : "s") + ' due');
+    if (!bits.length) bits.push(s.total ? "You're all caught up." : "Your dashboard fills up as enquiries arrive.");
+    return '<div class="d-hero"><div><span class="d-date">' + new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) + '</span><h2>' + greeting() + ', ' + esc(name) + '</h2><p>' + bits.join(" · ") + '</p></div>' +
+      '<div class="d-actions"><button class="btn btn-p" data-act="message">' + IC.send + 'Message leads</button>' + (staff ? '<button class="btn btn-ghost-l" data-nav="leads">' + IC.inbox + 'Open leads</button>' : '<button class="btn btn-ghost-l" data-act="newoffer">' + IC.gift + 'New festival offer</button><button class="btn btn-ghost-l" data-nav="slides">' + IC.edit + 'Edit website</button>') + '</div></div>';
+  }
+  function kpiRow(s) {
+    const k = (icon, tone, label, val, foot, nav, lf) => '<button class="card d-kpi tone-' + tone + '" data-' + (lf ? 'lf="status" data-lv="' + lf + '"' : 'nav="' + nav + '"') + '>' + ico(icon) + '<span class="d-kl">' + label + '</span><b>' + val + '</b>' + foot + '</button>';
+    return '<div class="d-kpis">' +
+      k("inbox", "a", "New enquiries", s.fresh, '<span class="d-delta flat">' + (s.today ? s.today + " arrived today" : "Waiting for a first reply") + '</span>', "", "new") +
+      k("chart", "b", "Leads, last 30 days", s.m30, delta(s.m30, s.prev30), "leads") +
+      k("trophy", "c", "Won", s.won, '<span class="d-delta flat">' + (s.won + s.lost ? pct(s.won, s.won + s.lost) + "% win rate" : "Mark leads won or lost to track this") + '</span>', "", "won") +
+      k("bell", "d", "Follow-ups due", s.dueToday + s.overdue, '<span class="d-delta ' + (s.overdue ? "down" : "flat") + '">' + (s.overdue ? s.overdue + " overdue" : s.dueToday ? s.dueToday + " today" : "Nothing pending") + '</span>', "leads") + '</div>';
+  }
+  function renderDashboard(c) {
+    const staff = isStaff(), s = leadStats();
+    c.classList.add("dash");
+    c.innerHTML = heroBand(s, staff) + kpiRow(s) +
+      '<div class="d-grid g-21">' + trendChart() + pipelineCard(s) + '</div>' +
+      '<div class="d-grid g-21">' + latestCard(staff ? 8 : 6) + '<div class="d-stack">' + followUpCard() + (staff ? '' : offersCard()) + '</div></div>' +
+      '<div class="d-grid g-3">' + breakdown("What they want", "service", "Services leads ask about will show here.", "service") + breakdown("Business categories", "businessType", "Leads pick a category on the enquiry form.", "type") + breakdown("Top cities", "city", "Cities from the enquiry form will show here.", "q") + '</div>' +
+      (staff ? '' : '<div class="d-grid g-3">' + autoCard() + breakdown("Where leads come from", "source", "Sources will show here.", "") + healthCard() + '</div>' + contentCard());
+    if (!staff && !S.autoCfg) api("GET", "automation").then(a => { S.autoCfg = a || {}; const el = document.getElementById("autoCard"); if (el && S.view === "dashboard") el.outerHTML = autoCard(); }).catch(() => { const el = document.getElementById("autoCard"); if (el) el.querySelector(".help").textContent = "Couldn't load automation settings."; });
+  }
 
   /* ---------- leads ---------- */
   // Distinct values seen on leads, plus the categories offered on the website, so filters list every option.
@@ -554,6 +665,9 @@
     if (d.act === "discard") { S.draft = clone(S.content[S.view]); S.dirty = false; S.pendingDel = null; renderView(); return; }
     if (d.act === "csv") return exportCsv();
     if (d.act === "message") return openMessenger();
+    if (d.range) { S.dashRange = +d.range; const ch = document.querySelector(".d-chart"); if (ch) ch.outerHTML = trendChart(); return; }
+    if (d.lf) { S.leadFilter = { q: "", status: "", type: "", service: "" }; S.leadFilter[d.lf] = d.lv; return navigate("leads"); }
+    if (d.act === "newoffer") { await navigate("offers"); const add = document.querySelector('[data-act="add"]'); if (add) add.click(); return; }
     if (d.act === "backup") { try { const j = await api("GET", "backup"); return download(new Blob([JSON.stringify(j, null, 1)], { type: "application/json" }), "vivid-brandify-backup-" + new Date().toISOString().slice(0, 10) + ".json"); } catch (err) { return toast("Backup failed: " + err.message, true); } }
 
     const sc = S.schema[S.view];
