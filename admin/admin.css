@@ -302,3 +302,6 @@ button.pipe-row,button.hb-row{cursor:pointer}button.pipe-row:hover,button.hb-row
 .sales-row span{font-size:12px;color:var(--muted)}
 .ofl-row>b{font-variant-numeric:tabular-nums}
 @media (max-width:900px){.pay-grid{grid-template-columns:1fr}}
+.inv-links a{font-family:var(--mono);font-size:12px;margin-right:6px}
+.gst-exp{display:inline-flex;gap:6px;align-items:center}
+.gst-exp input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:13px var(--body)}

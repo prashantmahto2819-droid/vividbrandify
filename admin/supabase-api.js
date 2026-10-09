@@ -248,6 +248,7 @@
         if (!out || !out.length) throw new ApiError(403, "Only admins can change orders.");
         return out[0];
       }
+      case "GET order-payments": return (await req("/rest/v1/order_payments?select=*&order=created_at.desc&limit=5000")) || [];
       case "GET store-settings": return (await rpc("get_store_settings", {})) || {};
       case "PUT store-settings": return await rpc("save_store_settings", { p: body });
       case "GET mail-log": return (await rpc("mail_log", { p_limit: 30 })) || [];

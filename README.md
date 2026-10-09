@@ -41,6 +41,13 @@ Admin → **WhatsApp → Automation** connects BotCommerce webhook workflows:
 
 For each one: create an approved template and a Webhook Workflow in BotCommerce, paste the Webhook Callback URL, save, click **Send sample**, then **Capture Webhook Response** in BotCommerce and map `phone` and the template variables. The webhook URLs are stored in Supabase and never reach the browser.
 
+## Store, GST and email
+
+- Products are edited in Admin → Store → Products & plans and sold on `/product/<slug>` pages.
+- `supabase/functions/store/index.ts` is the Supabase edge function `store`: Razorpay checkout, payment verification, webhooks, GST invoices (`/invoice`) and Resend emails. Deploy it with `verify_jwt` off; it checks Razorpay signatures and admin tokens itself.
+- Keys (Razorpay, Resend) are entered in Admin → Store → Payments & email and stored in `private.store_settings`; they never reach the browser.
+- Orders live in `public.orders`, each charge in `public.order_payments` with its invoice number.
+
 ## Editing content
 
 Content isn't stored in this repository. Slides, services, offers, blog posts and settings are edited in the admin panel and saved in Supabase, so they change instantly without a deploy. Only code changes go through this repository.

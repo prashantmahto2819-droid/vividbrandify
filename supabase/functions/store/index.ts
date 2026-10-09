@@ -6,6 +6,7 @@
 //   POST /webhook     Razorpay webhooks (signature checked with the webhook secret): captures, renewals, cancellations
 //   POST /lead-mail   internal (database trigger): auto-reply to a new enquiry and alert the team
 //   POST /test-mail   admin only: send a test email
+//   GET  /invoice     GST tax invoice for one payment (?id=<payment id>&k=<view key>), printable
 // Keys live in private.store_settings and are read with the service role; they are never sent to browsers.
 
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -87,6 +88,42 @@ async function razorpay(cfg: Cfg, path: string, body: unknown) {
   if (!r.ok) throw new HttpError(502, "Payment gateway error: " + ((j.error && j.error.description) || r.status));
   return j;
 }
+/* ---------- GST ---------- */
+export const STATES: Record<string, string> = {
+  "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana", "07": "Delhi",
+  "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
+  "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha",
+  "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat", "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra",
+  "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry",
+  "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other Territory",
+};
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const gstOn = (c: Cfg) => !!(c.gst_on && Number(c.gst_rate) > 0 && GSTIN_RE.test(c.seller_gstin || ""));
+// Splits an amount (paise) into taxable value and GST. "Inclusive" prices already contain GST; otherwise GST is added on top.
+export function gstOf(amount: number, rate: number, inclusive: boolean, sameState: boolean) {
+  if (!rate) return { taxable: amount, tax: 0, cgst: 0, sgst: 0, igst: 0, total: amount };
+  const taxable = inclusive ? Math.round(amount * 100 / (100 + rate)) : amount;
+  const total = inclusive ? amount : amount + Math.round(amount * rate / 100);
+  const tax = total - taxable;
+  const cgst = sameState ? Math.floor(tax / 2) : 0, sgst = sameState ? tax - cgst : 0, igst = sameState ? 0 : tax;
+  return { taxable, tax, cgst, sgst, igst, total };
+}
+export function inWords(paiseAmt: number) {
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const two = (n: number) => n < 20 ? ones[n] : tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+  const three = (n: number) => (n >= 100 ? ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " : "") : "") + (n % 100 ? two(n % 100) : "");
+  const words = (n: number) => {
+    if (!n) return "Zero";
+    const parts: string[] = [];
+    const crore = Math.floor(n / 1e7); n %= 1e7; const lakh = Math.floor(n / 1e5); n %= 1e5; const th = Math.floor(n / 1000); n %= 1000;
+    if (crore) parts.push(words(crore) + " Crore"); if (lakh) parts.push(two(lakh) + " Lakh"); if (th) parts.push(two(th) + " Thousand"); if (n) parts.push(three(n));
+    return parts.join(" ");
+  };
+  const r = Math.floor(paiseAmt / 100), p = paiseAmt % 100;
+  return "Rupees " + words(r) + (p ? " and " + two(p) + " Paise" : "") + " Only";
+}
+
 const storeReady = (c: Cfg) => !!(c && c.store_on && /^rzp_(test|live)_/.test(c.razorpay_key_id || "") && c.razorpay_key_secret);
 const mailReady = (c: Cfg) => !!(c && c.resend_api_key && /@/.test(c.mail_from || ""));
 
@@ -127,16 +164,32 @@ async function sendMail(cfg: Cfg, kind: string, to: string[], subject: string, h
 }
 const teamList = (cfg: Cfg) => String(cfg.team_emails || "").split(/[,;\s]+/).filter(Boolean);
 
+const invoiceUrl = (pay: any) => SB_URL + "/functions/v1/store/invoice?id=" + pay.id + "&k=" + pay.view_key;
+function taxRows(pay: any): [string, string][] {
+  if (!pay || !Number(pay.gst_rate)) return [];
+  const r = Number(pay.gst_rate);
+  return [["Taxable value", rupees(pay.taxable)]].concat(pay.igst ? [["IGST " + r + "%", rupees(pay.igst)]] : [["CGST " + r / 2 + "%", rupees(pay.cgst)], ["SGST " + r / 2 + "%", rupees(pay.sgst)]]) as [string, string][];
+}
+// Receipt for a renewal charge (the first payment is covered by orderEmails)
+async function receipt(cfg: Cfg, o: any, pay: any, renewal: boolean) {
+  if (!mailReady(cfg) || !cfg.mail_order_on || !o.email || !renewal) return;
+  const site = await siteInfo();
+  const rows: [string, string][] = ([["Invoice", pay.invoice_no], ["Order", o.order_no], ["Product", o.product_name + (o.plan_name ? " – " + o.plan_name : "")], ["Renewal", o.billing === "monthly" ? "Monthly" : "Yearly"]] as [string, string][]).concat(taxRows(pay), [["Amount paid", rupees(pay.amount)]]);
+  const body = "Hi " + ((o.customer_name || "").split(" ")[0] || "there") + ",\n\nYour " + o.product_name + " plan has renewed and we've received your payment. Your invoice is below.";
+  await sendMail(cfg, "renewal_receipt", [o.email], "Payment received: " + o.product_name + " renewal (" + pay.invoice_no + ")", emailHtml(site, "Your plan has renewed", body, rows, ["Download invoice", invoiceUrl(pay)]), body + "\n\n" + rows.map(r => r.join(": ")).join("\n") + "\nInvoice: " + invoiceUrl(pay), site.email || undefined);
+}
 async function orderEmails(cfg: Cfg, o: any) {
   if (!mailReady(cfg) || o.emailed) return;
   const site = await siteInfo();
+  const pays = await db("/rest/v1/order_payments?select=*&order_id=eq." + o.id + "&kind=eq.first&limit=1");
+  const pay = pays && pays[0];
   const vars = { name: (o.customer_name || "").split(" ")[0] || "there", brand: site.brand, product: o.product_name, plan: o.plan_name, amount: rupees(o.amount_paid), order_no: o.order_no, site: site.url, whatsapp: site.whatsapp ? "+" + String(site.whatsapp).replace(/\D/g, "") : "" };
   const billingLine = o.billing === "one-time" ? "One-time payment" : (o.billing === "monthly" ? "Monthly plan" : "Yearly plan") + ", renews automatically";
-  const rows: [string, string][] = [["Order", o.order_no], ["Product", o.product_name + (o.plan_name ? " – " + o.plan_name : "")], ["Billing", billingLine], ["Amount paid", rupees(o.amount_paid)], ["Payment ID", o.rzp_payment_id || "–"]];
+  const rows: [string, string][] = ((pay ? [["Invoice", pay.invoice_no]] : []) as [string, string][]).concat([["Order", o.order_no], ["Product", o.product_name + (o.plan_name ? " – " + o.plan_name : "")], ["Billing", billingLine]], taxRows(pay), [["Amount paid", rupees(o.amount_paid)], ["Payment ID", o.rzp_payment_id || "–"]]);
   if (cfg.mail_order_on && o.email) {
     const subject = fill(cfg.order_subject || "Payment received: {product} ({order_no})", vars);
     const body = fill(cfg.order_body || "Hi {name},\n\nThank you for your purchase. We've received your payment and our team will contact you within one working day to get you set up.\n\nKeep this email as your receipt.", vars);
-    await sendMail(cfg, "order_receipt", [o.email], subject, emailHtml(site, "Thank you for your order", body, rows), body + "\n\n" + rows.map(r => r.join(": ")).join("\n"), site.email || undefined);
+    await sendMail(cfg, "order_receipt", [o.email], subject, emailHtml(site, "Thank you for your order", body, rows, pay ? ["Download GST invoice", invoiceUrl(pay)] : undefined), body + "\n\n" + rows.map(r => r.join(": ")).join("\n") + (pay ? "\nInvoice: " + invoiceUrl(pay) : ""), site.email || undefined);
   }
   if (cfg.mail_order_alert_on && teamList(cfg).length) {
     const subject = "New order " + o.order_no + ": " + o.product_name + " (" + rupees(o.amount_paid) + ")";
@@ -147,17 +200,35 @@ async function orderEmails(cfg: Cfg, o: any) {
 }
 
 /* ---------- payments ---------- */
+// Records one successful charge with its own GST invoice number (idempotent per Razorpay payment id).
+async function recordPayment(cfg: Cfg, o: any, paymentId: string, amount: number, kind: "first" | "renewal") {
+  const have = await db("/rest/v1/order_payments?select=*&rzp_payment_id=eq." + encodeURIComponent(paymentId));
+  if (have && have[0]) return { pay: have[0], fresh: false };
+  const g = gstOf(amount, Number(o.gst_rate) || 0, true, o.seller_state && o.seller_state === o.buyer_state);
+  const n = await internal("invoice_no");
+  const invoiceNo = (cfg.invoice_prefix || "VB/") + n.fy + "/" + String(n.n).padStart(4, "0");
+  const rows = await db("/rest/v1/order_payments", { method: "POST", prefer: "return=representation", body: JSON.stringify({
+    order_id: o.id, kind, rzp_payment_id: paymentId, amount, taxable: g.taxable, cgst: g.cgst, sgst: g.sgst, igst: g.igst, gst_rate: Number(o.gst_rate) || 0, invoice_no: invoiceNo,
+  }) });
+  return { pay: rows[0], fresh: true };
+}
 async function markPaid(cfg: Cfg, o: any, paymentId: string, amount: number) {
   if (o.status === "paid" || o.status === "active") {
     if (paymentId && o.rzp_payment_id !== paymentId && o.billing !== "one-time") {
       // a renewal charge on an existing subscription
-      return patchOrder(o.id, { rzp_payment_id: paymentId, payments: (o.payments || 0) + 1, amount_paid: (o.amount_paid || 0) + amount, last_payment_at: new Date().toISOString(), status: "active" });
+      const { pay, fresh } = await recordPayment(cfg, o, paymentId, amount, "renewal");
+      if (!fresh) return o;
+      const upd = await patchOrder(o.id, { rzp_payment_id: paymentId, payments: (o.payments || 0) + 1, amount_paid: (o.amount_paid || 0) + amount, last_payment_at: new Date().toISOString(), status: "active" });
+      await receipt(cfg, upd, pay, true).catch(() => {});
+      return upd;
     }
     return o;
   }
+  const paidAmt = amount || o.total_amount || o.price + o.setup_fee;
+  await recordPayment(cfg, o, paymentId, paidAmt, "first");
   const upd = await patchOrder(o.id, {
     status: o.billing === "one-time" ? "paid" : "active", rzp_payment_id: paymentId, payments: 1,
-    amount_paid: amount || o.price + o.setup_fee, last_payment_at: new Date().toISOString(),
+    amount_paid: paidAmt, last_payment_at: new Date().toISOString(),
   });
   // add the buyer to Leads as a won customer, so follow-ups and WhatsApp messages work for them too
   if (!upd.lead_id) {
@@ -187,7 +258,10 @@ async function checkout(req: Request, cfg: Cfg) {
   const plan = plans[Number(b.plan)];
   if (!plan) throw new HttpError(400, "Please choose a plan.");
   const c = b.customer || {};
-  const cust = { name: clean(c.name, 120), email: clean(c.email, 160).toLowerCase(), phone: clean(c.phone, 30), business: clean(c.business, 160), gstin: clean(c.gstin, 20).toUpperCase(), city: clean(c.city, 80) };
+  const cust = { name: clean(c.name, 120), email: clean(c.email, 160).toLowerCase(), phone: clean(c.phone, 30), business: clean(c.business, 160), gstin: clean(c.gstin, 20).toUpperCase().replace(/\s/g, ""), city: clean(c.city, 80), state: clean(c.state, 2) };
+  if (cust.gstin && !GSTIN_RE.test(cust.gstin)) throw new HttpError(400, "That GSTIN doesn't look right. It has 15 characters, e.g. 23ABCDE1234F1Z5. Leave it empty if you don't have one.");
+  if (cust.gstin) cust.state = cust.gstin.slice(0, 2);
+  if (!STATES[cust.state]) throw new HttpError(400, "Please choose your state.");
   if (!cust.name) throw new HttpError(400, "Please add your name.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cust.email)) throw new HttpError(400, "Please add a valid email for your receipt.");
   if (cust.phone.replace(/\D/g, "").length < 10) throw new HttpError(400, "Please add a valid phone number.");
@@ -196,33 +270,38 @@ async function checkout(req: Request, cfg: Cfg) {
   if (recent.length >= 20) throw new HttpError(429, "Too many checkouts right now. Please try again in a minute.");
 
   const price = paise(plan.price), setup = paise(plan.setup), no = orderNo();
+  const useGst = gstOn(cfg), rate = useGst ? Number(cfg.gst_rate) : 0, incl = !!cfg.gst_inclusive;
+  const sellerState = useGst ? cfg.seller_gstin.slice(0, 2) : "", same = sellerState === cust.state;
+  const gP = gstOf(price, rate, incl, same), gS = gstOf(setup, rate, incl, same);
   const desc = p.name + (plans.length > 1 || plan.name !== "Standard" ? " – " + plan.name : "");
   const notes = { order_no: no, product: p.slug, plan: plan.name };
   const row = (await db("/rest/v1/orders", { method: "POST", prefer: "return=representation", body: JSON.stringify({
     order_no: no, product_slug: p.slug, product_name: clean(p.name, 160), plan_name: clean(plan.name, 80), billing: plan.billing, price, setup_fee: setup,
     customer_name: cust.name, email: cust.email, phone: cust.phone, business: cust.business, gstin: cust.gstin, city: cust.city,
+    gst_rate: rate, gst_inclusive: incl, buyer_state: cust.state, seller_state: sellerState,
+    taxable_amount: gP.taxable + gS.taxable, tax_amount: gP.tax + gS.tax, total_amount: gP.total + gS.total,
   }) }))[0];
 
   const base = { key: cfg.razorpay_key_id, order_no: no, name: (await siteInfo()).brand, description: desc.slice(0, 250), prefill: { name: cust.name, email: cust.email, contact: cust.phone }, notes };
   if (plan.billing === "one-time") {
-    const o = await razorpay(cfg, "/orders", { amount: price + setup, currency: "INR", receipt: no, notes });
+    const o = await razorpay(cfg, "/orders", { amount: gP.total + gS.total, currency: "INR", receipt: no, notes });
     await patchOrder(row.id, { rzp_order_id: o.id });
-    return { ...base, mode: "order", order_id: o.id, amount: price + setup, currency: "INR" };
+    return { ...base, mode: "order", order_id: o.id, amount: gP.total + gS.total, currency: "INR" };
   }
   const period = plan.billing;
-  const pkey = cfg.razorpay_key_id.slice(0, 9) + ":" + period + ":" + price + ":" + p.slug + ":" + plan.name;
+  const pkey = cfg.razorpay_key_id.slice(0, 9) + ":" + period + ":" + gP.total + ":" + p.slug + ":" + plan.name;
   let planId = (await internal("plan_get", { key: pkey }))?.plan_id;
   if (!planId) {
-    const rp = await razorpay(cfg, "/plans", { period, interval: 1, item: { name: desc.slice(0, 100), amount: price, currency: "INR" }, notes: { product: p.slug, plan: plan.name } });
+    const rp = await razorpay(cfg, "/plans", { period, interval: 1, item: { name: desc.slice(0, 100), amount: gP.total, currency: "INR" }, notes: { product: p.slug, plan: plan.name } });
     planId = rp.id;
     await internal("plan_put", { key: pkey, plan_id: planId });
   }
   const sub = await razorpay(cfg, "/subscriptions", {
     plan_id: planId, total_count: period === "monthly" ? 60 : 10, quantity: 1, customer_notify: 1, notes,
-    ...(setup ? { addons: [{ item: { name: "One-time setup fee", amount: setup, currency: "INR" } }] } : {}),
+    ...(setup ? { addons: [{ item: { name: "One-time setup fee", amount: gS.total, currency: "INR" } }] } : {}),
   });
   await patchOrder(row.id, { rzp_subscription_id: sub.id });
-  return { ...base, mode: "subscription", subscription_id: sub.id, amount: price + setup, currency: "INR" };
+  return { ...base, mode: "subscription", subscription_id: sub.id, amount: gP.total + gS.total, currency: "INR" };
 }
 
 async function verify(req: Request, cfg: Cfg) {
@@ -233,7 +312,7 @@ async function verify(req: Request, cfg: Cfg) {
   const msg = o.billing === "one-time" ? o.rzp_order_id + "|" + pay : pay + "|" + o.rzp_subscription_id;
   const good = !!pay && safeEqual(await hmacHex(cfg.razorpay_key_secret || "", msg), sig);
   if (!good) throw new HttpError(400, "We couldn't confirm this payment. If money was deducted, please contact us with your order number " + o.order_no + ".");
-  const upd = await markPaid(cfg, o, pay, o.price + o.setup_fee);
+  const upd = await markPaid(cfg, o, pay, o.total_amount || o.price + o.setup_fee);
   return { ok: true, order_no: upd.order_no, status: upd.status };
 }
 
@@ -302,13 +381,48 @@ async function testMail(req: Request, cfg: Cfg) {
   return { ok: true };
 }
 
+/* ---------- GST invoice ---------- */
+async function invoice(req: Request, cfg: Cfg) {
+  const u = new URL(req.url), id = clean(u.searchParams.get("id"), 40), k = clean(u.searchParams.get("k"), 64);
+  const pays = /^[0-9a-f-]{36}$/.test(id) ? await db("/rest/v1/order_payments?select=*&id=eq." + id) : [];
+  const pay = pays && pays[0];
+  if (!pay || !safeEqual(pay.view_key, k)) return new Response("Invoice not found", { status: 404, headers: { "Content-Type": "text/plain" } });
+  const o = await orderBy("id", pay.order_id), site = await siteInfo();
+  const r = Number(pay.gst_rate), gst = r > 0, same = !pay.igst;
+  const sellerGstin = o.seller_state ? cfg.seller_gstin || "" : "";
+  const date = new Date(pay.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  const desc = o.product_name + (o.plan_name ? " – " + o.plan_name : "") + (pay.kind === "renewal" ? " (renewal)" : o.setup_fee && pay.kind === "first" ? " (incl. one-time setup)" : "") + (o.billing !== "one-time" ? ", " + o.billing + " plan" : "");
+  const th = (t: string) => '<th style="text-align:left;padding:8px;border-bottom:2px solid #241517;font-size:12px;text-transform:uppercase;letter-spacing:.04em">' + t + "</th>";
+  const td = (t: string, right = false) => '<td style="padding:8px;border-bottom:1px solid #EADFDA;' + (right ? "text-align:right;white-space:nowrap" : "") + '">' + t + "</td>";
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + (gst ? "Tax Invoice " : "Invoice ") + esc(pay.invoice_no) + '</title>' +
+    '<style>body{font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#241517;background:#FBF7F4;margin:0;padding:24px 12px}.inv{max-width:820px;margin:0 auto;background:#fff;border:1px solid #EADFDA;border-radius:12px;padding:32px}table{width:100%;border-collapse:collapse;font-size:14px}.muted{color:#6B5A5C}.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:24px 0}.btn{display:inline-block;background:#F7941D;color:#1C0F04;font-weight:700;padding:10px 18px;border-radius:999px;border:0;cursor:pointer;font-size:15px}@media print{body{background:#fff;padding:0}.inv{border:0;padding:0}.noprint{display:none}}@media (max-width:600px){.grid{grid-template-columns:1fr}.inv{padding:20px}}</style></head><body>' +
+    '<p class="noprint" style="max-width:820px;margin:0 auto 12px;text-align:right"><button class="btn" onclick="print()">Download / Print</button></p><div class="inv">' +
+    '<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start;border-bottom:3px solid #F7941D;padding-bottom:16px"><img src="' + esc(site.url) + '/assets/brand/logo.png" alt="' + esc(site.brand) + '" style="height:56px">' +
+    '<div style="text-align:right"><div style="font-size:22px;font-weight:800">' + (gst ? "TAX INVOICE" : "INVOICE") + '</div><div class="muted">Invoice no. <b style="color:#241517">' + esc(pay.invoice_no) + '</b></div><div class="muted">Date: ' + esc(date) + '</div><div class="muted">Order: ' + esc(o.order_no) + "</div></div></div>" +
+    '<div class="grid"><div><div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em">From</div><b>' + esc(cfg.seller_name || site.brand) + '</b><div style="white-space:pre-line">' + esc(cfg.seller_address || "") + "</div>" +
+      (sellerGstin ? "<div>GSTIN: <b>" + esc(sellerGstin) + "</b></div><div>State: " + esc(STATES[o.seller_state] || "") + " (" + esc(o.seller_state) + ")</div>" : "") + (site.email ? "<div>" + esc(site.email) + "</div>" : "") + (site.phone ? "<div>" + esc(site.phone) + "</div>" : "") + "</div>" +
+    '<div><div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em">Bill to</div><b>' + esc(o.business || o.customer_name) + "</b>" + (o.business ? "<div>" + esc(o.customer_name) + "</div>" : "") + (o.city ? "<div>" + esc(o.city) + "</div>" : "") +
+      (o.gstin ? "<div>GSTIN: <b>" + esc(o.gstin) + "</b></div>" : "") + (o.buyer_state ? "<div>State: " + esc(STATES[o.buyer_state] || "") + " (" + esc(o.buyer_state) + ")</div>" : "") + "<div>" + esc(o.email) + "</div><div>" + esc(o.phone) + "</div>" +
+      (gst ? '<div style="margin-top:6px">Place of supply: <b>' + esc(STATES[o.buyer_state] || "") + "</b></div>" : "") + "</div></div>" +
+    "<table><thead><tr>" + th("Description") + (gst ? th("SAC") : "") + th(gst ? "Taxable value" : "Amount") + (gst ? (same ? th("CGST " + r / 2 + "%") + th("SGST " + r / 2 + "%") : th("IGST " + r + "%")) : "") + th("Total") + "</tr></thead><tbody><tr>" +
+      td(esc(desc)) + (gst ? td(esc(cfg.sac_code || "–")) : "") + td(rupees(pay.taxable), true) + (gst ? (same ? td(rupees(pay.cgst), true) + td(rupees(pay.sgst), true) : td(rupees(pay.igst), true)) : "") + td("<b>" + rupees(pay.amount) + "</b>", true) + "</tr></tbody></table>" +
+    '<table style="margin-top:12px;max-width:360px;margin-left:auto"><tbody>' + (gst ? "<tr>" + td("Taxable value") + td(rupees(pay.taxable), true) + "</tr>" + (same ? "<tr>" + td("CGST @ " + r / 2 + "%") + td(rupees(pay.cgst), true) + "</tr><tr>" + td("SGST @ " + r / 2 + "%") + td(rupees(pay.sgst), true) + "</tr>" : "<tr>" + td("IGST @ " + r + "%") + td(rupees(pay.igst), true) + "</tr>") : "") +
+      '<tr><td style="padding:10px 8px;font-weight:800;font-size:16px">Total paid</td><td style="padding:10px 8px;font-weight:800;font-size:16px;text-align:right">' + rupees(pay.amount) + "</td></tr></tbody></table>" +
+    '<p style="margin-top:16px"><span class="muted">Amount in words:</span> <b>' + esc(inWords(pay.amount)) + "</b></p>" +
+    '<p class="muted" style="font-size:13px">Paid online via Razorpay · Payment ID ' + esc(pay.rzp_payment_id) + (gst ? " · Tax payable on reverse charge: No" : "") + "</p>" +
+    '<p class="muted" style="font-size:12px;margin-top:24px;border-top:1px solid #EADFDA;padding-top:12px">This is a computer-generated invoice and does not need a signature.</p></div></body></html>';
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex" } });
+}
+
 /* ---------- router ---------- */
 export async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   const route = new URL(req.url).pathname.replace(/^.*\/store/, "") || "/";
   try {
     const cfg: Cfg = (await internal("config")) || {};
-    if (route === "/status" && req.method === "GET") return json({ store: storeReady(cfg), test: /^rzp_test_/.test(cfg.razorpay_key_id || ""), gst_note: cfg.gst_note || "" });
+    if (route === "/status" && req.method === "GET") return json({ store: storeReady(cfg), test: /^rzp_test_/.test(cfg.razorpay_key_id || ""), gst_note: cfg.gst_note || "",
+      gst: gstOn(cfg) ? { rate: Number(cfg.gst_rate), inclusive: !!cfg.gst_inclusive, seller_state: cfg.seller_gstin.slice(0, 2) } : null });
+    if (route === "/invoice" && req.method === "GET") return await invoice(req, cfg);
     if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
     if (route === "/checkout") return json(await checkout(req, cfg));
     if (route === "/verify") return json(await verify(req, cfg));

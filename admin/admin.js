@@ -58,8 +58,8 @@
   function fld(id, label, input) { return '<div class="fld"><label for="' + id + '">' + esc(label) + '</label>' + input + '</div>'; }
 
   async function loadAll() {
-    const [schema, content, leads, media, dash, orders] = await Promise.all([api("GET", "schema"), api("GET", "content"), api("GET", "leads"), api("GET", "media"), api("GET", "dashboard"), api("GET", "orders").catch(() => [])]);
-    Object.assign(S, { schema, content, leads, media, dash, orders });
+    const [schema, content, leads, media, dash, orders, payments] = await Promise.all([api("GET", "schema"), api("GET", "content"), api("GET", "leads"), api("GET", "media"), api("GET", "dashboard"), api("GET", "orders").catch(() => []), api("GET", "order-payments").catch(() => [])]);
+    Object.assign(S, { schema, content, leads, media, dash, orders, payments });
   }
 
   /* ---------- shell ---------- */
@@ -120,7 +120,7 @@
     S.view = v; S.sel = null; S.draft = null; S.dirty = false; S.pendingDel = null;
     if (v === "dashboard") { S.dash = await api("GET", "dashboard").catch(() => S.dash); S.leads = await api("GET", "leads").catch(() => S.leads); }
     if (v === "leads") S.leads = await api("GET", "leads").catch(() => S.leads);
-    if (v === "orders" || v === "dashboard") S.orders = await api("GET", "orders").catch(() => S.orders);
+    if (v === "orders" || v === "dashboard") { S.orders = await api("GET", "orders").catch(() => S.orders); S.payments = await api("GET", "order-payments").catch(() => S.payments); }
     renderShell();
     window.scrollTo(0, 0);
   }
@@ -417,23 +417,41 @@
       '<div class="filters"><input type="search" id="oq" placeholder="Search order, name, phone, GSTIN…" value="' + esc(f.q) + '" aria-label="Search orders">' +
       '<select id="ost" aria-label="Filter by status"><option value="">All orders</option><option value="paid"' + (f.status === "paid" ? " selected" : "") + '>Paid orders</option>' + Object.entries(ORDER_ST).map(([k, v]) => '<option value="' + k + '"' + (f.status === k ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select>' +
       '<select id="oprod" aria-label="Filter by product"><option value="">All products</option>' + products.map(([k, v]) => '<option value="' + esc(k) + '"' + (f.product === k ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
-      '<span class="help">' + rows.length + ' of ' + O.length + '</span><span style="flex:1"></span><button class="btn btn-s btn-sm" data-act="ocsv"' + (rows.length ? "" : " disabled") + '>Export CSV</button></div>' +
+      '<span class="help">' + rows.length + ' of ' + O.length + '</span><span style="flex:1"></span><button class="btn btn-s btn-sm" data-act="ocsv"' + (rows.length ? "" : " disabled") + '>Export CSV</button>' +
+      '<span class="gst-exp"><input type="month" id="gstMonth" value="' + new Date().toISOString().slice(0, 7) + '" aria-label="GST month"><button class="btn btn-s btn-sm" data-act="gstcsv"' + ((S.payments || []).length ? "" : " disabled") + '>GST register</button></span></div>' +
       (rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Product</th><th>Paid</th><th>Status</th><th>Notes</th></tr></thead><tbody>' + rows.map(o => {
         const s = ORDER_ST[o.status] || [o.status, "off"];
         return '<tr><td>' + new Date(o.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '<div class="sub">' + new Date(o.created_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) + '</div></td>' +
           '<td><b style="font-family:var(--mono);font-size:13px">' + esc(o.order_no) + '</b>' + (o.rzp_payment_id ? '<div class="sub">' + esc(o.rzp_payment_id) + '</div>' : '') + '</td>' +
           '<td><b>' + esc(o.customer_name) + '</b>' + (o.business ? '<div class="sub">' + esc(o.business) + (o.city ? " · " + esc(o.city) : "") + '</div>' : '') + '<div class="sub"><a href="tel:' + esc(o.phone) + '">' + esc(o.phone) + '</a> · <a href="https://wa.me/' + waNum(o.phone) + '" target="_blank" rel="noopener">WhatsApp</a></div><div class="sub"><a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a></div>' + (o.gstin ? '<div class="sub">GSTIN ' + esc(o.gstin) + '</div>' : '') + '</td>' +
           '<td>' + esc(o.product_name) + '<div class="sub">' + esc(o.plan_name) + ' · ' + (o.billing === "one-time" ? "one-time" : o.billing) + '</div><div class="sub">' + inr(o.price) + (o.setup_fee ? " + " + inr(o.setup_fee) + " setup" : "") + '</div></td>' +
-          '<td><b>' + inr(o.amount_paid) + '</b>' + (o.payments > 1 ? '<div class="sub">' + o.payments + ' payments</div>' : '') + (o.next_charge_at && o.status === "active" ? '<div class="sub">Next ' + new Date(o.next_charge_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
+          '<td><b>' + inr(o.amount_paid) + '</b>' + (Number(o.gst_rate) ? '<div class="sub">incl. GST ' + Number(o.gst_rate) + '% · ' + (o.seller_state && o.seller_state === o.buyer_state ? "CGST+SGST" : "IGST") + '</div>' : '') + invoiceLinks(o) + (o.payments > 1 ? '<div class="sub">' + o.payments + ' payments</div>' : '') + (o.next_charge_at && o.status === "active" ? '<div class="sub">Next ' + new Date(o.next_charge_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
           '<td>' + (isStaff() ? '<span class="tagp ' + s[1] + '">' + s[0] + '</span>' : '<select class="st ost-' + s[1] + '" data-ostatus="' + o.id + '" aria-label="Order status">' + Object.entries(ORDER_ST).map(([k, v]) => '<option value="' + k + '"' + (k === o.status ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select>') + '</td>' +
           '<td>' + (isStaff() ? '<div class="msg">' + esc(o.notes) + '</div>' : '<textarea class="lead-notes" data-onotes="' + o.id + '" aria-label="Notes">' + esc(o.notes) + '</textarea>') + '</td></tr>';
       }).join("") + '</tbody></table></div>'
         : '<div class="empty">' + (O.length ? "No orders match this filter." : "No orders yet. When customers buy from your Software pages, their orders appear here. Set up payments under Store → Payments & email.") + '</div>');
   }
+  const invUrl = p => window.VB_SUPABASE.url + "/functions/v1/store/invoice?id=" + p.id + "&k=" + p.view_key;
+  function invoiceLinks(o) {
+    const ps = (S.payments || []).filter(p => p.order_id === o.id);
+    return ps.length ? '<div class="sub inv-links">' + ps.map(p => '<a href="' + esc(invUrl(p)) + '" target="_blank" rel="noopener">' + esc(p.invoice_no) + '</a>').join(" ") + '</div>' : '';
+  }
+  // GST register: one line per payment (invoice) in the chosen month, for your CA / GSTR-1
+  function exportGst() {
+    const mon = (document.getElementById("gstMonth") || {}).value || new Date().toISOString().slice(0, 7);
+    const byId = new Map((S.orders || []).map(o => [o.id, o]));
+    const rows = (S.payments || []).filter(p => String(p.created_at).slice(0, 7) === mon || new Date(p.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).slice(0, 7) === mon).sort((a, b) => a.invoice_no.localeCompare(b.invoice_no));
+    if (!rows.length) return toast("No payments in " + mon + ".", true);
+    const cols = ["Invoice no", "Invoice date", "Customer", "Business", "Customer GSTIN", "Place of supply (state code)", "Type", "Description", "SAC", "Taxable value", "GST rate %", "CGST", "SGST", "IGST", "Invoice total", "Razorpay payment ID", "Order"];
+    const cell = v => { const x = v == null ? "" : String(v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+    const r2 = n => (n / 100).toFixed(2);
+    const lines = rows.map(p => { const o = byId.get(p.order_id) || {}; return [p.invoice_no, new Date(p.created_at).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }), o.customer_name, o.business, o.gstin, o.buyer_state, o.gstin ? "B2B" : "B2C", o.product_name + (o.plan_name ? " – " + o.plan_name : "") + (p.kind === "renewal" ? " (renewal)" : ""), S.storeSac || "", r2(p.taxable), Number(p.gst_rate), r2(p.cgst), r2(p.sgst), r2(p.igst), r2(p.amount), p.rzp_payment_id, o.order_no].map(cell).join(","); });
+    download(new Blob(["\ufeff" + [cols.join(",")].concat(lines).join("\r\n")], { type: "text/csv" }), "gst-register-" + mon + ".csv");
+  }
   function exportOrders() {
-    const cols = ["created_at", "order_no", "status", "customer_name", "phone", "email", "business", "gstin", "city", "product_name", "plan_name", "billing", "price", "setup_fee", "amount_paid", "payments", "rzp_payment_id", "rzp_subscription_id", "notes"];
+    const cols = ["created_at", "order_no", "status", "customer_name", "phone", "email", "business", "gstin", "city", "buyer_state", "product_name", "plan_name", "billing", "price", "setup_fee", "gst_rate", "taxable_amount", "tax_amount", "total_amount", "amount_paid", "payments", "rzp_payment_id", "rzp_subscription_id", "notes"];
     const cell = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const money = ["price", "setup_fee", "amount_paid"];
+    const money = ["price", "setup_fee", "amount_paid", "taxable_amount", "tax_amount", "total_amount"];
     const csv = [cols.join(",")].concat((S.orders || []).map(o => cols.map(k => cell(money.includes(k) ? (o[k] / 100).toFixed(2) : o[k])).join(","))).join("\r\n");
     download(new Blob(["﻿" + csv], { type: "text/csv" }), "orders-" + new Date().toISOString().slice(0, 10) + ".csv");
   }
@@ -442,7 +460,7 @@
   async function renderPayments(c) {
     c.innerHTML = '<div class="empty">Loading…</div>';
     let cfg, log;
-    try { [cfg, log] = await Promise.all([api("GET", "store-settings"), api("GET", "mail-log").catch(() => [])]); }
+    try { [cfg, log] = await Promise.all([api("GET", "store-settings"), api("GET", "mail-log").catch(() => [])]); S.storeSac = cfg.sac_code || ""; }
     catch (err) { c.innerHTML = '<div class="empty">' + esc(err.message) + '</div>'; return; }
     const hook = window.VB_SUPABASE.url + "/functions/v1/store/webhook";
     const mode = /^rzp_live_/.test(cfg.razorpay_key_id || "") ? ["Live mode", "live"] : /^rzp_test_/.test(cfg.razorpay_key_id || "") ? ["Test mode", "warn"] : ["Not set up", "off"];
@@ -459,7 +477,7 @@
         sec("razorpay_webhook_secret", "Webhook secret", cfg.razorpay_webhook_secret_set, "The secret you type when adding the webhook below.") +
         '<div class="fld"><label>Webhook URL <button type="button" class="btn btn-g btn-sm" data-copy="' + esc(hook) + '">Copy</button></label><code class="codebox">' + esc(hook) + '</code>' +
           '<span class="hint">Razorpay → Account & Settings → Webhooks → Add new webhook. Paste this URL, set a secret, and tick: payment.captured, payment.failed, subscription.activated, subscription.charged, subscription.halted, subscription.cancelled, subscription.completed, refund.processed. This keeps renewals and cancellations in sync.</span></div>' +
-        txt("gst_note", "Tax note under prices", "Prices include 18% GST", "Optional. Shown under the plans on every product page.") +
+        txt("gst_note", "Extra note under prices", "e.g. Setup within 2 working days", "Optional. Shown under the plans on every product page.") +
         '<p class="help" style="font-size:13px">Subscriptions need Razorpay Subscriptions turned on for your account (ask Razorpay support if plans fail to create).</p>' +
       '</div>' +
       '<div class="card form"><div class="d-card-h"><h2>Email automation</h2><span class="tagp ' + (cfg.resend_api_key_set && cfg.mail_from ? "live" : "off") + '">' + (cfg.resend_api_key_set && cfg.mail_from ? "Connected" : "Not set up") + '</span></div>' +
@@ -470,6 +488,15 @@
         '<div class="chk-list">' + chk("mail_lead_reply_on", "Auto-reply to every enquiry", "Goes to the email the visitor typed in the form") +
         chk("mail_lead_alert_on", "Alert the team about new enquiries") + chk("mail_order_on", "Send a receipt to buyers", "After every successful payment") + chk("mail_order_alert_on", "Alert the team about new orders") + '</div>' +
         '<div class="fld"><label for="testTo">Send a test email</label><div style="display:flex;gap:8px"><input type="email" id="testTo" placeholder="you@example.com" value="' + esc(S.user.email) + '"><button type="button" class="btn btn-s btn-sm" data-act="testmail">Send test</button></div><span class="hint">Save first, then test.</span></div>' +
+      '</div>' +
+      '<div class="card form span2"><div class="d-card-h"><h2>GST billing</h2><span class="tagp ' + (cfg.gst_on ? "live" : "off") + '">' + (cfg.gst_on ? "GST on · " + (cfg.gst_rate || 18) + "%" : "GST off") + '</span></div>' +
+        '<p class="help">Every payment gets a numbered GST tax invoice (CGST + SGST inside your state, IGST outside it), emailed to the buyer and listed in Orders. Check the rate and SAC code with your CA.</p>' +
+        '<div class="two"><div>' + chk("gst_on", "Charge GST on online sales", "Needs your GSTIN") +
+          '<div class="fld"><label for="gst_rate">GST rate (%)</label><input type="number" id="gst_rate" min="0" max="40" step="0.01" value="' + esc(cfg.gst_rate == null ? 18 : cfg.gst_rate) + '"><span class="hint">Most software and IT services are 18%.</span></div>' +
+          '<div class="fld"><label>Your prices are</label><label class="chk" for="gst_excl"><input type="radio" name="gstmode" id="gst_excl"' + (cfg.gst_inclusive ? "" : " checked") + '><span>Before GST <span class="hint">GST is added at checkout: ₹999 + 18% = ₹1,178.82</span></span></label><label class="chk" for="gst_inclusive"><input type="radio" name="gstmode" id="gst_inclusive"' + (cfg.gst_inclusive ? " checked" : "") + '><span>Including GST <span class="hint">The buyer pays the listed price; the invoice shows the GST inside it</span></span></label></div>' +
+          txt("sac_code", "SAC code", "998314", "Printed on invoices. Ask your CA which code fits your services.") + '</div>' +
+        '<div>' + txt("seller_gstin", "Your GSTIN", "23ABCDE1234F1Z5", "The first two digits set your home state for CGST/SGST.") + txt("seller_name", "Legal business name", "Vivid Brandify", "As on your GST registration.") +
+          area("seller_address", "Registered address", "Shop / office, street\nCity, State PIN", 3) + txt("invoice_prefix", "Invoice number prefix", "VB/", "Invoices are numbered per financial year: VB/26-27/0001, VB/26-27/0002…") + '</div></div>' +
       '</div>' +
       '<div class="card form span2"><h2>Email wording</h2><p class="help">Leave empty to use the built-in wording. You can use {name}, {brand}, {service}, {whatsapp}, {site}; in receipts also {product}, {plan}, {amount}, {order_no}. A blank line starts a new paragraph.</p>' +
         '<div class="two">' + '<div>' + txt("lead_reply_subject", "Enquiry auto-reply: subject", "Thanks for contacting {brand}") + area("lead_reply_body", "Enquiry auto-reply: message", "Hi {name},\n\nThanks for your enquiry about {service}. Our team will get back to you within one working day.\n\nIf it's urgent, message us on WhatsApp at {whatsapp}.") + '</div>' +
@@ -483,10 +510,12 @@
   async function savePayments() {
     const v = id => (document.getElementById(id) || {}).value || "", ch = id => !!(document.getElementById(id) || {}).checked;
     const body = {};
-    ["razorpay_key_id", "gst_note", "mail_from", "team_emails", "lead_reply_subject", "lead_reply_body", "order_subject", "order_body"].forEach(k => body[k] = v(k).trim());
+    ["razorpay_key_id", "gst_note", "gst_rate", "seller_gstin", "seller_name", "seller_address", "sac_code", "invoice_prefix", "mail_from", "team_emails", "lead_reply_subject", "lead_reply_body", "order_subject", "order_body"].forEach(k => body[k] = v(k).trim());
     ["razorpay_key_secret", "razorpay_webhook_secret", "resend_api_key"].forEach(k => body[k] = v(k).trim());
-    ["store_on", "mail_lead_reply_on", "mail_lead_alert_on", "mail_order_on", "mail_order_alert_on"].forEach(k => body[k] = ch(k));
+    ["store_on", "gst_on", "gst_inclusive", "mail_lead_reply_on", "mail_lead_alert_on", "mail_order_on", "mail_order_alert_on"].forEach(k => body[k] = ch(k));
     if (body.store_on && !body.razorpay_key_id) return toast("Add your Razorpay Key ID before switching payments on.", true);
+    body.seller_gstin = body.seller_gstin.toUpperCase();
+    if (body.gst_on && !/^[0-9]{2}[A-Z0-9]{13}$/.test(body.seller_gstin)) return toast("Add your 15-character GSTIN to charge GST.", true);
     try { await api("PUT", "store-settings", body); toast("Settings saved."); renderView(); }
     catch (err) { toast(err.message, true); }
   }
@@ -783,6 +812,7 @@
     if (d.act === "csv") return exportCsv();
     if (d.act === "message") return openMessenger();
     if (d.act === "ocsv") return exportOrders();
+    if (d.act === "gstcsv") return exportGst();
     if (d.act === "savepay") return savePayments();
     if (d.act === "testmail") { const to = (document.getElementById("testTo") || {}).value || ""; b.disabled = true; try { await api("POST", "test-mail", { to }); toast("Test email sent to " + to + ". Check the inbox (and spam)."); } catch (err) { toast(err.message, true); } b.disabled = false; return; }
     if (d.copy) { try { await navigator.clipboard.writeText(d.copy); toast("Copied."); } catch (_) { toast("Couldn't copy. Select the text and copy it.", true); } return; }

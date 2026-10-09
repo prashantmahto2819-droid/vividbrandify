@@ -495,3 +495,6 @@ body.co-open{overflow:hidden}
 .co-done{display:grid;gap:12px;justify-items:center;text-align:center;padding:12px 0}
 .co-done .btn{justify-content:center}
 .co-check{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:#1E8E5A;color:#fff;font-size:34px}
+.plan-gst{font-size:13px;color:var(--muted);margin-top:-6px}
+.co-tax span,.co-tax b{color:var(--muted);font-weight:500}
+.co-fields select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px;font:15px var(--body);background:var(--bg);color:var(--ink)}

@@ -35,3 +35,13 @@
 -- as business_type and city.
 -- alter table public.leads add column if not exists business_type text not null default '' check (char_length(business_type) <= 80);
 -- alter table public.leads add column if not exists city text not null default '' check (char_length(city) <= 80);
+
+-- Store and GST (see docs/SETUP-GUIDE.md sections 6-8)
+-- public.orders            one row per checkout (product, plan, customer, GST split, Razorpay ids, status)
+-- public.order_payments    one row per successful charge, with invoice_no (prefix + financial year + number) and view_key for the invoice link
+-- private.store_settings   Razorpay / Resend keys, GST details, email switches and wording (admin RPCs get_store_settings / save_store_settings)
+-- private.razorpay_plans   cache of Razorpay plan ids per product/plan/amount
+-- private.invoice_counter  invoice sequence per financial year
+-- private.mail_log         every email the store function sends (admin RPC mail_log)
+-- public.store_internal()  service-role only helper used by the edge function
+-- trigger leads_email_automation -> edge function /store/lead-mail for enquiry emails

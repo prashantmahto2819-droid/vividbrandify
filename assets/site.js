@@ -393,7 +393,17 @@ function vbStart() {
     return (ps.length > 1 ? "From " : "") + inr(low.price) + per(low.billing);
   }
   const STORE = { on: null };
-  const storeReady = PRODUCTS.length ? fetch(window.VB_SUPABASE.url + "/functions/v1/store/status").then(r => r.json()).then(j => { STORE.on = !!j.store; STORE.gst = j.gst_note || ""; STORE.test = !!j.test; return STORE; }).catch(() => { STORE.on = false; return STORE; }) : Promise.resolve(STORE);
+  const STATES = { "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat", "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra", "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other Territory" };
+  const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+  // same maths as the payment server: amounts in rupees here, rounded to paise
+  function gstOf(amount, g, same) {
+    const p = Math.round(amount * 100);
+    if (!g) return { taxable: p, tax: 0, total: p, cgst: 0, sgst: 0, igst: 0 };
+    const taxable = g.inclusive ? Math.round(p * 100 / (100 + g.rate)) : p, total = g.inclusive ? p : p + Math.round(p * g.rate / 100), tax = total - taxable;
+    return { taxable, tax, total, cgst: same ? Math.floor(tax / 2) : 0, sgst: same ? tax - Math.floor(tax / 2) : 0, igst: same ? 0 : tax };
+  }
+  const inrP = p => inr(p / 100);
+  const storeReady = PRODUCTS.length ? fetch(window.VB_SUPABASE.url + "/functions/v1/store/status").then(r => r.json()).then(j => { STORE.on = !!j.store; STORE.gst = j.gst_note || ""; STORE.test = !!j.test; STORE.tax = j.gst || null; return STORE; }).catch(() => { STORE.on = false; return STORE; }) : Promise.resolve(STORE);
   function prodIcon(x) { return x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<span class="pc-ic">' + (ICONS[x.icon] || ICONS.software || "") + '</span>'; }
   function renderStore() {
     const g = $("prodGrid"); if (!g) return;
@@ -441,7 +451,10 @@ function vbStart() {
     document.title = x.name + " | " + st.brand;
     if (push) history.pushState({ product: slug }, "", "/product/" + slug);
     window.scrollTo(0, 0); stopAuto();
-    storeReady.then(s => { const n = $("payNote"); if (n && s.gst) n.insertAdjacentHTML("beforeend", '<br><span class="gst">' + esc(s.gst) + '</span>'); if (n && s.test) n.insertAdjacentHTML("beforeend", '<br><span class="gst">Test mode: no real money is charged.</span>'); });
+    storeReady.then(s => {
+      if (s.tax) document.querySelectorAll("#productView .plan-price").forEach(el => el.insertAdjacentHTML("afterend", '<p class="plan-gst">' + (s.tax.inclusive ? "Price includes " + s.tax.rate + "% GST" : "+ " + s.tax.rate + "% GST") + '</p>'));
+      const n = $("payNote"); if (n && s.tax) n.insertAdjacentHTML("beforeend", '<br><span class="gst">GST invoice emailed after payment. Add your GSTIN at checkout to claim input tax credit.</span>');
+      if (n && s.gst) n.insertAdjacentHTML("beforeend", '<br><span class="gst">' + esc(s.gst) + '</span>'); if (n && s.test) n.insertAdjacentHTML("beforeend", '<br><span class="gst">Test mode: no real money is charged.</span>'); });
     $("productView").onclick = e => { const b = e.target.closest("[data-buy]"); if (b) openCheckout(x, plans[+b.dataset.buy]); };
     return true;
   }
@@ -462,16 +475,33 @@ function vbStart() {
     const m = document.createElement("div"); m.className = "co-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "Checkout");
     m.innerHTML = '<form class="co-box" novalidate><button type="button" class="co-x" data-co="close" aria-label="Close">×</button>' +
       '<div class="co-head"><div class="eyebrow">Checkout</div><h2>' + esc(x.name) + '</h2><p>' + esc(plan.name) + ' plan</p></div>' +
-      '<div class="co-sum"><div><span>' + esc(plan.name) + ' (' + perLong(plan.billing) + ')</span><b>' + inr(plan.price) + '</b></div>' + (plan.setup ? '<div><span>One-time setup</span><b>' + inr(plan.setup) + '</b></div>' : '') +
-        '<div class="co-total"><span>Pay today</span><b>' + inr(total) + '</b></div>' + (plan.billing !== "one-time" ? '<p class="co-renew">Then ' + inr(plan.price) + per(plan.billing) + ', charged automatically until you cancel.</p>' : '') + '</div>' +
+      '<div class="co-sum" id="coSum"></div>' +
       '<div class="co-fields"><div class="two"><label>Your name<input name="name" autocomplete="name" required></label><label>Phone / WhatsApp<input name="phone" type="tel" inputmode="tel" autocomplete="tel" required></label></div>' +
         '<label>Email for the receipt<input name="email" type="email" autocomplete="email" required></label>' +
         '<div class="two"><label>Business name<input name="business" autocomplete="organization"></label><label>City<input name="city" autocomplete="address-level2"></label></div>' +
-        '<label>GSTIN <small>(optional, for a GST invoice)</small><input name="gstin" maxlength="15" autocapitalize="characters"></label></div>' +
+        '<div class="two"><label>State<select name="state" required><option value="">Select your state</option>' + Object.entries(STATES).sort((a, b) => a[1].localeCompare(b[1])).map(([c, n]) => '<option value="' + c + '">' + esc(n) + '</option>').join("") + '</select></label>' +
+        '<label>GSTIN <small>(optional, for input tax credit)</small><input name="gstin" maxlength="15" autocapitalize="characters" placeholder="e.g. 23ABCDE1234F1Z5"></label></div></div>' +
       '<div class="co-out" aria-live="polite"></div><button class="btn btn-accent co-pay" type="submit">Pay ' + inr(total) + ' securely</button>' +
       '<p class="co-safe">🔒 Payments are handled by Razorpay. We never see your card or UPI details.</p></form>';
     document.body.appendChild(m); document.body.classList.add("co-open");
     const f = m.querySelector("form"), out = m.querySelector(".co-out"), btn = m.querySelector(".co-pay");
+    const g = s.tax;
+    let payLabel = "";
+    const sum = () => {
+      const st8 = f.state.value, same = g && st8 === g.seller_state;
+      const a = gstOf(plan.price, g, same), b = gstOf(plan.setup, g, same), t = { taxable: a.taxable + b.taxable, tax: a.tax + b.tax, total: a.total + b.total, cgst: a.cgst + b.cgst, sgst: a.sgst + b.sgst, igst: a.igst + b.igst };
+      const row = (k, v, cls) => '<div' + (cls ? ' class="' + cls + '"' : '') + '><span>' + k + '</span><b>' + v + '</b></div>';
+      let h = row(esc(plan.name) + ' (' + perLong(plan.billing) + ')', inr(plan.price)) + (plan.setup ? row("One-time setup", inr(plan.setup)) : "");
+      if (g && !g.inclusive) h += (!st8 ? row("GST " + g.rate + "%", '<small>select your state</small>', "co-tax") : same ? row("CGST " + g.rate / 2 + "%", inrP(t.cgst), "co-tax") + row("SGST " + g.rate / 2 + "%", inrP(t.sgst), "co-tax") : row("IGST " + g.rate + "%", inrP(t.igst), "co-tax"));
+      h += row("Pay today", inrP(t.total), "co-total");
+      if (g && g.inclusive) h += '<p class="co-renew">Includes GST of ' + inrP(t.tax) + (st8 ? (same ? " (CGST + SGST)" : " (IGST)") : "") + '.</p>';
+      if (plan.billing !== "one-time") h += '<p class="co-renew">Then ' + inrP(a.total) + per(plan.billing) + (g && !g.inclusive ? " incl. GST" : "") + ', charged automatically until you cancel.</p>';
+      $("coSum").innerHTML = h;
+      payLabel = "Pay " + inrP(t.total) + " securely"; if (!btn.disabled) btn.textContent = payLabel;
+    };
+    f.gstin.addEventListener("input", () => { const v = f.gstin.value.toUpperCase().replace(/\s/g, ""); if (/^\d{2}/.test(v) && STATES[v.slice(0, 2)]) { f.state.value = v.slice(0, 2); sum(); } });
+    f.state.addEventListener("change", sum);
+    sum();
     const close = () => { m.remove(); document.body.classList.remove("co-open"); };
     m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-co=close]")) close(); });
     m.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
@@ -486,6 +516,9 @@ function vbStart() {
       if (!String(d.name || "").trim()) { out.innerHTML = '<p class="err">Please add your name.</p>'; return; }
       if (String(d.phone || "").replace(/\D/g, "").length < 10) { out.innerHTML = '<p class="err">Please add a valid phone number.</p>'; return; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email || "").trim())) { out.innerHTML = '<p class="err">Please add a valid email for your receipt.</p>'; return; }
+      d.gstin = String(d.gstin || "").toUpperCase().replace(/\s/g, "");
+      if (d.gstin && !GSTIN_RE.test(d.gstin)) { out.innerHTML = '<p class="err">That GSTIN doesn\'t look right. It has 15 characters, e.g. 23ABCDE1234F1Z5. Leave it empty if you don\'t have one.</p>'; return; }
+      if (!d.state) { out.innerHTML = '<p class="err">Please choose your state.</p>'; f.state.focus(); return; }
       btn.disabled = true; btn.textContent = "Opening secure payment…"; out.innerHTML = "";
       try {
         const [r] = await Promise.all([fetch(window.VB_SUPABASE.url + "/functions/v1/store/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product: x.slug, plan: parsePlans(x.plans).findIndex(p => p.name === plan.name && p.price === plan.price), customer: d }) }), loadRzp()]);
@@ -502,14 +535,14 @@ function vbStart() {
               const vj = await v.json();
               if (!v.ok) throw new Error(vj.error);
               done(j.order_no, vj.status);
-            } catch (err) { out.innerHTML = '<p class="err">' + esc(err.message || "We couldn't confirm the payment.") + '</p>'; btn.disabled = false; btn.textContent = "Pay " + inr(total) + " securely"; }
+            } catch (err) { out.innerHTML = '<p class="err">' + esc(err.message || "We couldn't confirm the payment.") + '</p>'; btn.disabled = false; btn.textContent = payLabel; }
           },
-          modal: { ondismiss: () => { btn.disabled = false; btn.textContent = "Pay " + inr(total) + " securely"; } },
+          modal: { ondismiss: () => { btn.disabled = false; btn.textContent = payLabel; } },
         });
         rz.on("payment.failed", resp => { out.innerHTML = '<p class="err">Payment failed: ' + esc((resp.error && resp.error.description) || "please try again") + '. No money was taken for this attempt.</p>'; });
         rz.open();
       } catch (err) {
-        out.innerHTML = '<p class="err">' + esc(err.message) + '</p>'; btn.disabled = false; btn.textContent = "Pay " + inr(total) + " securely";
+        out.innerHTML = '<p class="err">' + esc(err.message) + '</p>'; btn.disabled = false; btn.textContent = payLabel;
       }
     });
   }

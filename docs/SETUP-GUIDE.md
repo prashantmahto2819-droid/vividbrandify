@@ -62,6 +62,36 @@ create policy "admins delete media" on storage.objects
 
 ---
 
+## 6. Sell software online (Razorpay)
+
+1. Admin → **Store → Products & plans**: add each app or software. Put one plan per line in **Plans and prices**:
+   `Plan name | price | monthly, yearly or one-time | setup fee | note`
+   e.g. `Starter | 999 | monthly | 2999 | 1 user, 5,000 messages`. Tick **Published** and save.
+2. In Razorpay: **Account & Settings → API Keys** → generate a key (start with **Test mode**). Copy the Key ID and Key Secret.
+3. Admin → **Store → Payments & email**: paste the Key ID and Key Secret, tick **Take payments on the website**, save.
+4. Razorpay → **Account & Settings → Webhooks → Add new webhook**: paste the Webhook URL shown in the admin, type a secret, and tick
+   `payment.captured, payment.failed, subscription.activated, subscription.charged, subscription.halted, subscription.cancelled, subscription.completed, refund.processed`.
+   Paste the same secret into **Webhook secret** in the admin and save.
+5. Monthly and yearly plans use Razorpay Subscriptions. If plan creation fails, ask Razorpay support to enable Subscriptions on your account.
+6. Test a purchase with Razorpay's test cards or UPI, check it under **Store → Orders**, then switch to your **Live** keys.
+
+## 7. GST billing
+
+Admin → **Store → Payments & email → GST billing**:
+
+- Tick **Charge GST**, set the rate (18% for most software/IT services) and choose whether your prices are **before GST** (GST added at checkout) or **including GST**.
+- Enter your GSTIN, legal name, registered address, SAC code and invoice prefix. Confirm the rate and SAC code with your CA.
+- Buyers pick their state at checkout (or it is read from their GSTIN). Same state as yours → CGST + SGST; other states → IGST.
+- Every payment, including each monthly/yearly renewal, gets a numbered tax invoice (e.g. `VB/26-27/0001`), emailed to the buyer and linked in **Orders**.
+- **Orders → GST register** downloads a month's invoices as CSV for your CA / GSTR-1.
+
+## 8. Email automation (Resend)
+
+1. Create a Resend account, add your domain (e.g. vividbrandify.com) and add the DNS records it shows in Cloudflare DNS. Wait until Resend shows it verified.
+2. Resend → **API Keys → Create API key** (Sending access).
+3. Admin → **Store → Payments & email**: paste the API key, set **Send from** (e.g. `Vivid Brandify <hello@vividbrandify.com>`), add team emails, tick the emails you want, save, then **Send test**.
+4. Emails sent: auto-reply to every enquiry, new-enquiry alert to the team, receipt + GST invoice to buyers, new-order alert to the team. All appear under **Recent emails**.
+
 ## Updating the site later
 
 - **Content** (slides, blog, reviews, widget, colours, SEO and so on): edit it in `/admin/`. Changes appear on the site within about 10 seconds.
