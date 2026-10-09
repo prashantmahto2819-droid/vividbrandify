@@ -61,8 +61,9 @@ function vbStart() {
   /* ---------- header, nav, sections ---------- */
   const sectionById = Object.fromEntries(S.sections.map(s => [s.id, s]));
   function renderChrome() {
-    $("logo").innerHTML = (st.logo ? '<img src="' + esc(st.logo) + '" alt="">' : '<span class="logo-mark">' + TICK + '</span>') +
-      '<span>' + esc(st.brand) + (st.logoSub ? '<small>' + esc(st.logoSub) + '</small>' : '') + '</span>';
+    $("logo").innerHTML = st.logo ? '<img class="logo-img" src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" width="87" height="56">'
+      : '<span class="logo-mark">' + TICK + '</span><span>' + esc(st.brand) + (st.logoSub ? '<small>' + esc(st.logoSub) + '</small>' : '') + '</span>';
+    $("logo").setAttribute("aria-label", st.brand + " home");
     const navLinks = S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(s => '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>');
     const contact = sectionById.contact;
     if (st.navCta && contact && contact.visible) navLinks.push('<a class="btn btn-accent btn-small" href="/#contact" data-sec="contact">' + esc(st.navCta) + '</a>');
@@ -160,7 +161,7 @@ function vbStart() {
     $("fSubmit").textContent = st.contactButton || "Send my enquiry";
 
     const social = lines(st.social).map(l => l.split("|")).filter(p => p[1]);
-    $("foot").innerHTML = '<div style="display:grid;gap:6px;max-width:44ch"><b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b><span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
+    $("foot").innerHTML = '<div class="foot-brand">' + (st.logo ? '<img src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" loading="lazy">' : '<b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b>') + (st.logoSub ? '<span class="foot-motto">' + esc(st.logoSub) + '</span>' : '') + '<span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
       '<div style="display:grid;gap:12px;justify-items:end"><nav aria-label="Footer">' + S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(s => '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>').join("") + (sectionById.contact && sectionById.contact.visible ? '<a href="/#contact" data-sec="contact">Contact</a>' : '') + '</nav>' +
       (social.length ? '<div class="social">' + social.map(p => '<a href="' + esc(safeUrl(p[1].trim())) + '" target="_blank" rel="noopener">' + esc(p[0].trim()) + '</a>').join("") + '</div>' : '') + '</div>';
   }

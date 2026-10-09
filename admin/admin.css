@@ -1,7 +1,7 @@
-/* Admin panel: navy sidebar + light work surface, same type system as the public site */
+/* Admin panel: ember sidebar + light work surface, same type system as the public site */
 :root{
   --bg:#F3F5F9; --surface:#FFFFFF; --ink:#0D1B3E; --muted:#5B6580; --line:#DDE2EC; --soft:#EEF1F7;
-  --accent:#F4A51C; --on-accent:#1A1406; --side:#0D1B3E; --side-fg:#E9EDF7; --side-muted:#98A3C2;
+  --accent:#F7941D; --on-accent:#1C0F04; --side:#24100F; --side-fg:#FFF1EA; --side-muted:#C9AFA6;
   --ok:#15803D; --ok-bg:#DCFCE7; --warn:#B45309; --warn-bg:#FEF3C7; --bad:#B91C1C; --bad-bg:#FEE2E2; --info:#0369A1; --info-bg:#E0F2FE;
   --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
   --body:"Figtree","Segoe UI",system-ui,sans-serif;
@@ -9,7 +9,7 @@
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#0A1024; --surface:#111A33; --ink:#E8ECF6; --muted:#9BA5C0; --line:#243152; --soft:#17223F;
-  --accent:#F6B23E; --side:#070D20; --side-fg:#E9EDF7; --side-muted:#8E99B8;
+  --accent:#F9A440; --side:#120807; --side-fg:#FFF1EA; --side-muted:#B59E97;
   --ok:#4ADE80; --ok-bg:#12301F; --warn:#FBBF24; --warn-bg:#33270B; --bad:#F87171; --bad-bg:#3A1414; --info:#38BDF8; --info-bg:#0C2A3D;
   color-scheme:dark}}
 *{box-sizing:border-box}
@@ -21,7 +21,7 @@ a{color:inherit}
 .boot{padding:40px;color:var(--muted)}
 
 /* auth */
-.auth{min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:radial-gradient(800px 400px at 80% 0%,#16285A,transparent 70%),var(--side)}
+.auth{min-height:100vh;display:grid;place-items:center;padding:24px 16px;background:radial-gradient(800px 400px at 80% 0%,#5A1A12,transparent 70%),var(--side)}
 .auth-card{width:min(420px,100%);background:var(--surface);border-radius:20px;padding:32px;display:grid;gap:16px;box-shadow:0 30px 60px rgba(0,0,0,.35)}
 .auth-card h1{font-size:28px}
 .auth-card p{color:var(--muted);margin:0}
@@ -190,3 +190,4 @@ td .msg{max-width:320px;white-space:pre-wrap}
 .auto-grid>.card,.auto-card>*{min-width:0;max-width:100%}
 .auto-card .fld input,.auto-card .fld textarea{max-width:100%}
 .auto-h .chk{flex:none}
+.auth-logo{height:90px;width:auto;justify-self:start}

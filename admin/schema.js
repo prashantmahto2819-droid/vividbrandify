@@ -124,7 +124,7 @@ const SCHEMA = {
     kind: 'object', group: 'Site', label: 'Brand & contact',
     fields: [
       ['brand', 'text', 'Brand name'],
-      ['logoSub', 'text', 'Text under the logo'],
+      ['logoSub', 'text', 'Tagline under the logo', { hint: 'Shown in the footer with the logo, e.g. Brand loud. Stand proud.' }],
       ['logo', 'image', 'Logo image', { hint: 'Optional. Replaces the tick mark next to the name' }],
       ['favicon', 'image', 'Browser tab icon', { hint: 'Square PNG, 64×64 or larger' }],
       ['tagline', 'text', 'Tagline'],
@@ -193,7 +193,7 @@ const SCHEMA = {
 };
 
 const SECTION_IDS = ['stats', 'services', 'process', 'reviews', 'blog', 'faq', 'contact'];
-const IMAGE_RE = /^(\/uploads\/[A-Za-z0-9._-]+|https:\/\/[^\s"'<>]+)$/;
+const IMAGE_RE = /^(\/uploads\/[A-Za-z0-9._-]+|\/assets\/[A-Za-z0-9._\/-]+|https:\/\/[^\s"'<>]+)$/;
 
 function slugify(s) {
   return String(s || '').toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_-]+/g, '-').slice(0, 80) || 'post';

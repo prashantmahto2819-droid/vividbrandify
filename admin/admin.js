@@ -34,7 +34,7 @@
   }
   function renderAuth(setup) {
     app.innerHTML = '<div class="auth"><form class="auth-card" id="authForm">' +
-      '<div class="brandmark"><span class="mark">' + TICK + '</span>Vivid Brandify</div>' +
+      '<img class="auth-logo" src="/assets/brand/logo.png" alt="Vivid Brandify" width="140" height="90">' +
       (setup ? '<h1>Create the admin account</h1><p>First-time setup. Enter the setup code you were given, then choose the email and password you will sign in with.</p>' +
         fld("setupCode", "Setup code", '<input id="setupCode" type="text" autocomplete="off" required>') +
         fld("name", "Your name", '<input id="name" type="text" autocomplete="name">') : '<h1>Sign in</h1><p>Manage the website, blog, leads and WhatsApp widget.</p>') +
