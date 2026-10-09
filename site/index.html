@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--SEO--><title>Vivid Brandify | WhatsApp, Voice Call &amp; AI Video Marketing Agency</title>
+<meta name="description" content="Vivid Brandify runs WhatsApp marketing, voice call campaigns, WhatsApp marketing software, AI video creation and complete digital marketing for growing businesses.">
+<meta property="og:title" content="Vivid Brandify | WhatsApp, Voice Call &amp; AI Video Marketing Agency"><!--/SEO-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="/assets/site.css">
+<!--THEME-->
+<!--HEAD_CODE-->
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="offer-bar" id="offerBar" hidden></div>
+<header class="site-head">
+  <div class="wrap head-row">
+    <a class="logo" href="/" id="logo"></a>
+    <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">Menu</button>
+    <nav class="nav" id="nav" aria-label="Main"></nav>
+  </div>
+</header>
+
+<main id="main">
+  <div id="homeView">
+    <section class="hero" aria-roledescription="carousel" aria-label="Highlights">
+      <div class="wrap">
+        <div class="slides" id="slides"></div>
+        <div class="hero-note" id="heroNote"></div>
+        <div class="hero-foot" id="heroFoot">
+          <div class="dots" id="dots" role="tablist" aria-label="Choose slide"></div>
+          <div class="arrows">
+            <button class="arrow" id="prev" aria-label="Previous slide">←</button>
+            <button class="arrow" id="next" aria-label="Next slide">→</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap" id="sections">
+      <section class="offers-strip" id="offers" hidden></section>
+      <div data-section="stats" class="stats-wrap"><div class="stats" id="stats"></div></div>
+
+      <section class="block" id="services" data-section="services">
+        <div class="sec-head"></div>
+        <div class="svc-grid" id="svcGrid"></div>
+      </section>
+
+      <section class="block" id="process" data-section="process">
+        <div class="sec-head"></div>
+        <div class="steps" id="steps"></div>
+      </section>
+
+      <section class="block" id="reviews" data-section="reviews">
+        <div class="sec-head"></div>
+        <div class="quotes" id="quotes" tabindex="0" aria-label="Reviews, scroll sideways"></div>
+        <div class="row-ctrl"><button id="qPrev" aria-label="Previous review">←</button><button id="qNext" aria-label="Next review">→</button></div>
+      </section>
+
+      <section class="block" id="blog" data-section="blog">
+        <div class="sec-head"></div>
+        <div class="posts" id="posts"></div>
+      </section>
+
+      <section class="block" id="faq" data-section="faq">
+        <div class="sec-head"></div>
+        <div class="faq" id="faqList"></div>
+      </section>
+
+      <section class="contact" id="contact" data-section="contact">
+        <div class="contact-copy">
+          <div class="eyebrow" id="ctEyebrow"></div>
+          <h2 id="ctHeading"></h2>
+          <p id="ctText"></p>
+          <div class="contact-lines" id="ctLines"></div>
+        </div>
+        <form class="form" id="leadForm" novalidate>
+          <div class="two">
+            <label for="fName">Your name<input id="fName" name="name" type="text" autocomplete="name" required></label>
+            <label for="fBiz">Business<input id="fBiz" name="business" type="text" autocomplete="organization"></label>
+          </div>
+          <div class="two">
+            <label for="fPhone">Phone / WhatsApp<input id="fPhone" name="phone" type="tel" autocomplete="tel" inputmode="tel"></label>
+            <label for="fEmail">Email<input id="fEmail" name="email" type="email" autocomplete="email"></label>
+          </div>
+          <label for="fSvc">What do you need?<select id="fSvc" name="service"></select></label>
+          <label for="fMsg">Tell us a little more<textarea id="fMsg" name="message" rows="4" placeholder="e.g. I run a clinic and want appointment reminders on WhatsApp"></textarea></label>
+          <label class="optin" for="fOptin"><input type="checkbox" id="fOptin" name="opt_in" value="yes"> Send me offers and reminders on WhatsApp</label>
+          <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+          <div><button class="btn btn-accent" type="submit" id="fSubmit">Send my enquiry</button></div>
+          <div class="form-out" id="formOut" aria-live="polite"></div>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <div id="offerView" hidden></div>
+  <div id="articleView" hidden><div class="wrap"><article class="article" id="article"></article></div></div>
+  <!--NOSCRIPT-->
+  <div class="wrap"><footer class="foot" id="foot"></footer></div>
+</main>
+
+<div id="waWidget"></div>
+
+<!--DATA-->
+<script src="/assets/config.js"></script>
+<script src="/assets/content.js"></script>
+<script src="/assets/site.js" defer></script>
+<!--BODY_END-->
+</body>
+</html>
