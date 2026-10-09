@@ -3,7 +3,7 @@
   "use strict";
   const CFG = window.VB_SUPABASE;
   const OBJECTS = ["settings", "theme", "seo", "widget", "code"];
-  const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers"];
+  const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products"];
 
   function normalize(rows) {
     const c = {};
@@ -22,6 +22,7 @@
       posts: c.posts.filter(p => p.published).sort((a, b) => String(b.date).localeCompare(String(a.date))),
       faqs: c.faqs,
       offers: c.offers.filter(o => o.published),
+      products: c.products.filter(x => x.published),
       widget: c.widget.mode === "built-in" ? Object.assign({}, c.widget, { customCode: undefined }) : { mode: c.widget.mode },
     };
   }
@@ -76,6 +77,8 @@
     window.__POST__ = m ? m[1] : null;
     const mo = /^\/offer\/([\w-]+)\/?$/.exec(location.pathname);
     window.__OFFER__ = mo ? mo[1] : null;
+    const mp = /^\/product\/([\w-]+)\/?$/.exec(location.pathname);
+    window.__PRODUCT__ = mp ? mp[1] : null;
     return toPublic(c);
   }
 

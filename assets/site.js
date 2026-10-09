@@ -59,6 +59,10 @@ function vbStart() {
   }
 
   /* ---------- header, nav, sections ---------- */
+  if (!S.sections.some(x => x.id === "store")) {
+    const at = S.sections.findIndex(x => x.id === "services");
+    S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." });
+  }
   const sectionById = Object.fromEntries(S.sections.map(s => [s.id, s]));
   function renderChrome() {
     $("logo").innerHTML = st.logo ? '<img class="logo-img" src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" width="87" height="56">'
@@ -85,7 +89,7 @@ function vbStart() {
     // first visible block after the stats strip gets top spacing only
   }
   function sectionHasContent(id) {
-    return ({ stats: lines(st.stats).length, services: S.services.length, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
+    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
   }
 
   /* ---------- hero slider ---------- */
@@ -159,6 +163,7 @@ function vbStart() {
     $("ctLines").innerHTML = ls.map(l => '<div class="cline"><span class="k">' + esc(l[0]) + '</span>' + (l[2] ? '<a class="v" href="' + esc(l[2]) + '"' + (/^https/.test(l[2]) ? ' target="_blank" rel="noopener"' : '') + '>' + esc(l[1]) + '</a>' : '<span class="v">' + esc(l[1]).replace(/\n/g, "<br>") + '</span>') + '</div>').join("");
     const liveOffers = OFFERS.filter(o => offerState(o) === "live");
     $("fSvc").innerHTML = S.services.map(v => '<option>' + esc(v.name) + '</option>').join("") +
+      ((S.products || []).length ? '<optgroup label="Software">' + S.products.map(x => '<option>' + esc(("Product: " + x.name).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       (liveOffers.length ? '<optgroup label="Festival offers">' + liveOffers.map(o => '<option>' + esc(("Offer: " + o.title).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       '<option>Not sure yet</option>';
     $("fType").innerHTML = typeOptions();
@@ -195,23 +200,23 @@ function vbStart() {
     $("article").innerHTML = '<a class="btn btn-ghost btn-small back" href="/#blog" data-sec="blog">← All posts</a><div class="meta-line"><span>' + esc(p.category) + '</span><span>' + fmtDate(p.date) + '</span><span>' + esc(p.readTime) + ' read</span></div><h1>' + esc(p.title) + '</h1><p class="lede">' + esc(p.excerpt) + '</p>' + (p.author ? '<p class="by">By ' + esc(p.author) + '</p>' : '') +
       '<div class="article-cover">' + cover(p) + '</div><div class="article-body">' + mdLite(p.body) + '</div>' +
       '<div class="contact" style="margin-top:24px;grid-template-columns:1fr;padding:32px"><h2 style="font-size:28px">Want this set up for your business?</h2><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-accent" href="/#contact" data-sec="contact">Talk to us →</a>' + (st.whatsapp ? '<a class="btn btn-ghost" href="' + esc(waLink("Hi, I just read \"" + p.title + "\" and want to know more.")) + '" target="_blank" rel="noopener">Chat on WhatsApp</a>' : '') + '</div></div>';
-    $("homeView").hidden = true; $("offerView").hidden = true; $("articleView").hidden = false;
+    $("homeView").hidden = true; $("offerView").hidden = true; $("productView").hidden = true; $("articleView").hidden = false;
     document.title = p.title + " | " + st.brand;
     if (push) history.pushState({ post: slug }, "", "/blog/" + slug);
     window.scrollTo(0, 0); stopAuto();
     return true;
   }
   function showHome(sectionId, push) {
-    const wasArticle = !$("articleView").hidden || !$("offerView").hidden;
-    $("articleView").hidden = true; $("offerView").hidden = true; $("homeView").hidden = false; document.title = homeTitle;
+    const wasArticle = !$("articleView").hidden || !$("offerView").hidden || !$("productView").hidden;
+    $("articleView").hidden = true; $("offerView").hidden = true; $("productView").hidden = true; $("homeView").hidden = false; document.title = homeTitle;
     if (push) history.pushState({}, "", "/" + (sectionId ? "#" + sectionId : ""));
     if (wasArticle || push) startAuto();
     const el = sectionId && document.getElementById(sectionId);
     if (el) el.scrollIntoView(); else if (wasArticle) window.scrollTo(0, 0);
   }
   window.addEventListener("popstate", () => {
-    const m = /^\/blog\/([\w-]+)/.exec(location.pathname), mo = /^\/offer\/([\w-]+)/.exec(location.pathname);
-    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else showHome(location.hash.slice(1), false);
+    const m = /^\/blog\/([\w-]+)/.exec(location.pathname), mo = /^\/offer\/([\w-]+)/.exec(location.pathname), mp = /^\/product\/([\w-]+)/.exec(location.pathname);
+    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else showHome(location.hash.slice(1), false);
   });
 
   /* ---------- enquiry forms (contact section and offer pages) ---------- */
@@ -320,7 +325,7 @@ function vbStart() {
         '<label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>' +
         '<button class="btn btn-accent" type="submit">' + esc(o.ctaLabel || "Claim this offer") + '</button><div class="form-out" aria-live="polite"></div></form></aside></div>';
     bindLeadForm($("offerForm"), { service: ("Offer: " + o.title).slice(0, 120), success: "Thanks! We've received your request for " + o.title + ". Our team will contact you shortly." });
-    $("homeView").hidden = true; $("articleView").hidden = true; $("offerView").hidden = false;
+    $("homeView").hidden = true; $("articleView").hidden = true; $("productView").hidden = true; $("offerView").hidden = false;
     document.title = o.title + " | " + st.brand;
     if (push) history.pushState({ offer: slug }, "", "/offer/" + slug);
     window.scrollTo(0, 0); stopAuto();
@@ -369,18 +374,159 @@ function vbStart() {
     }, Math.max(0, +w.delay || 0) * 1000);
   }
 
+  /* ---------- store: products, plans and Razorpay checkout ---------- */
+  const PRODUCTS = S.products || [];
+  const inr = n => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  function parsePlans(text) {
+    return String(text || "").split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const [name = "", price = "", billing = "", setup = "", note = ""] = l.split("|").map(x => x.trim());
+      const num = s => { const n = Number(String(s).replace(/[^\d.]/g, "")); return Number.isFinite(n) ? n : 0; };
+      const b = billing.toLowerCase();
+      return { name: name || "Standard", price: num(price), billing: /year|annual|yr/.test(b) ? "yearly" : /month|mo\b|pm/.test(b) ? "monthly" : "one-time", setup: num(setup), note };
+    }).filter(p => p.price > 0 || p.setup > 0);
+  }
+  const per = b => b === "monthly" ? "/month" : b === "yearly" ? "/year" : "";
+  const perLong = b => b === "monthly" ? "per month" : b === "yearly" ? "per year" : "one-time";
+  function fromPrice(x) {
+    const ps = parsePlans(x.plans); if (!ps.length) return "";
+    const low = ps.reduce((a, b) => (b.price < a.price ? b : a));
+    return (ps.length > 1 ? "From " : "") + inr(low.price) + per(low.billing);
+  }
+  const STORE = { on: null };
+  const storeReady = PRODUCTS.length ? fetch(window.VB_SUPABASE.url + "/functions/v1/store/status").then(r => r.json()).then(j => { STORE.on = !!j.store; STORE.gst = j.gst_note || ""; STORE.test = !!j.test; return STORE; }).catch(() => { STORE.on = false; return STORE; }) : Promise.resolve(STORE);
+  function prodIcon(x) { return x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<span class="pc-ic">' + (ICONS[x.icon] || ICONS.software || "") + '</span>'; }
+  function renderStore() {
+    const g = $("prodGrid"); if (!g) return;
+    g.innerHTML = PRODUCTS.map(x => {
+      const feats = lines(x.features).slice(0, 4);
+      return '<article class="prod-card">' + (x.badge ? '<span class="pc-badge">' + esc(x.badge) + '</span>' : '') +
+        '<div class="pc-media">' + prodIcon(x) + '</div>' +
+        (x.category ? '<div class="eyebrow">' + esc(x.category) + '</div>' : '') + '<h3>' + esc(x.name) + '</h3><p>' + esc(x.tagline || x.summary) + '</p>' +
+        (feats.length ? '<ul>' + feats.map(f => '<li>' + TICK1 + '<span>' + esc(f) + '</span></li>').join("") + '</ul>' : '') +
+        '<div class="pc-foot"><span class="pc-price">' + esc(fromPrice(x)) + '</span><a class="btn btn-accent btn-small" href="/product/' + esc(x.slug) + '" data-product="' + esc(x.slug) + '">View plans →</a></div></article>';
+    }).join("");
+  }
+  function showProduct(slug, push) {
+    const x = PRODUCTS.find(p => p.slug === slug);
+    if (!x) return false;
+    const plans = parsePlans(x.plans), feats = lines(x.features);
+    const popular = plans.length > 2 ? 1 : -1;
+    $("productView").innerHTML =
+      '<section class="prod-hero"><div class="wrap prod-hero-grid"><div class="prod-copy">' +
+        '<a class="back-link" href="/#store" data-sec="store">← All software</a>' +
+        (x.category ? '<div class="eyebrow">' + esc(x.category) + '</div>' : '') + '<h1>' + esc(x.name) + '</h1>' +
+        (x.tagline ? '<p class="prod-tag">' + esc(x.tagline) + '</p>' : '') + (x.summary ? '<p>' + esc(x.summary) + '</p>' : '') +
+        '<div class="offer-ctas">' + (plans.length ? '<a class="btn btn-accent" href="#plans" data-jump="plans">See plans and prices →</a>' : '') +
+        (x.demo ? '<a class="btn btn-ghost" href="/#contact" data-sec="contact" data-service="' + esc("Product: " + x.name) + '">Book a free demo</a>' : '') + '</div>' +
+        (plans.length ? '<p class="prod-from">' + esc(fromPrice(x)) + '</p>' : '') +
+      '</div><div class="prod-visual">' + (x.image ? '<img src="' + esc(x.image) + '" alt="' + esc(x.name) + '">' : '<div class="prod-tile">' + (ICONS[x.icon] || ICONS.software || "") + '<b>' + esc(x.name) + '</b></div>') + '</div></div></section>' +
+      '<div class="wrap prod-body">' +
+        (plans.length ? '<section id="plans" class="plans-wrap"><div class="sec-head"><div><div class="eyebrow">Pricing</div><h2>Choose your plan</h2></div><p>Pay securely with UPI, cards or netbanking. You get a receipt by email straight away.</p></div>' +
+          '<div class="plans" style="--n:' + Math.min(plans.length, 3) + '">' + plans.map((p, i) => '<div class="plan' + (i === popular ? " hot" : "") + '">' + (i === popular ? '<span class="plan-flag">Most popular</span>' : '') +
+            '<h3>' + esc(p.name) + '</h3><div class="plan-price"><b>' + inr(p.price) + '</b><span>' + perLong(p.billing) + '</span></div>' +
+            (p.setup ? '<p class="plan-setup">+ ' + inr(p.setup) + ' one-time setup</p>' : '<p class="plan-setup">No setup fee</p>') +
+            (p.note ? '<p class="plan-note">' + esc(p.note) + '</p>' : '') +
+            '<button type="button" class="btn ' + (i === popular || plans.length === 1 ? "btn-accent" : "btn-ghost-dark") + ' plan-buy" data-buy="' + i + '">' + esc(x.buyLabel || "Buy now") + '</button>' +
+            (p.billing !== "one-time" ? '<small class="plan-renew">Renews ' + (p.billing === "monthly" ? "monthly" : "yearly") + ' until you cancel</small>' : '<small class="plan-renew">Pay once</small>') + '</div>').join("") + '</div>' +
+          '<p class="pay-note" id="payNote"><span class="lock" aria-hidden="true">🔒</span> Secure payments by Razorpay · UPI · Cards · Netbanking · Wallets</p></section>' : '') +
+        (feats.length ? '<section class="prod-feats"><h2>What you get</h2><ul class="offer-points">' + feats.map(f => '<li>' + TICK + '<span>' + esc(f) + '</span></li>').join("") + '</ul></section>' : '') +
+        (x.details ? '<div class="article-body offer-details">' + mdLite(x.details) + '</div>' : '') +
+        '<div class="offer-about"><h2>Have questions before you buy?</h2><p>Talk to our team and we\'ll help you pick the right plan.</p><div class="offer-links">' +
+          '<a class="btn btn-small btn-accent" href="/#contact" data-sec="contact" data-service="' + esc("Product: " + x.name) + '">Send an enquiry</a>' +
+          (st.whatsapp ? '<a class="btn btn-small btn-ghost-dark" href="' + esc(waLink("Hi " + st.brand + ", I have a question about " + x.name + ".")) + '" target="_blank" rel="noopener">WhatsApp us</a>' : '') +
+          (st.phone ? '<a class="btn btn-small btn-ghost-dark" href="tel:' + esc(st.phone.replace(/[^\d+]/g, "")) + '">Call ' + esc(st.phone) + '</a>' : '') +
+          '<a class="btn btn-small btn-ghost-dark" href="/" data-sec="top">Visit website</a></div></div>' +
+      '</div>';
+    $("homeView").hidden = true; $("articleView").hidden = true; $("offerView").hidden = true; $("productView").hidden = false;
+    document.title = x.name + " | " + st.brand;
+    if (push) history.pushState({ product: slug }, "", "/product/" + slug);
+    window.scrollTo(0, 0); stopAuto();
+    storeReady.then(s => { const n = $("payNote"); if (n && s.gst) n.insertAdjacentHTML("beforeend", '<br><span class="gst">' + esc(s.gst) + '</span>'); if (n && s.test) n.insertAdjacentHTML("beforeend", '<br><span class="gst">Test mode: no real money is charged.</span>'); });
+    $("productView").onclick = e => { const b = e.target.closest("[data-buy]"); if (b) openCheckout(x, plans[+b.dataset.buy]); };
+    return true;
+  }
+  function loadRzp() {
+    if (window.Razorpay) return Promise.resolve();
+    return new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://checkout.razorpay.com/v1/checkout.js"; s.onload = res; s.onerror = () => rej(new Error("Couldn't load the payment window. Check your connection and try again.")); document.head.appendChild(s); });
+  }
+  async function openCheckout(x, plan) {
+    if (!plan) return;
+    const s = await storeReady;
+    if (!s.on) {
+      showHome("contact", true);
+      const opt = [...$("fSvc").options].find(o => o.value === "Product: " + x.name); if (opt) $("fSvc").value = opt.value;
+      $("fMsg").value = "I'd like to buy " + x.name + " – " + plan.name + " (" + inr(plan.price) + per(plan.billing) + ").";
+      return;
+    }
+    const total = plan.price + plan.setup;
+    const m = document.createElement("div"); m.className = "co-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "Checkout");
+    m.innerHTML = '<form class="co-box" novalidate><button type="button" class="co-x" data-co="close" aria-label="Close">×</button>' +
+      '<div class="co-head"><div class="eyebrow">Checkout</div><h2>' + esc(x.name) + '</h2><p>' + esc(plan.name) + ' plan</p></div>' +
+      '<div class="co-sum"><div><span>' + esc(plan.name) + ' (' + perLong(plan.billing) + ')</span><b>' + inr(plan.price) + '</b></div>' + (plan.setup ? '<div><span>One-time setup</span><b>' + inr(plan.setup) + '</b></div>' : '') +
+        '<div class="co-total"><span>Pay today</span><b>' + inr(total) + '</b></div>' + (plan.billing !== "one-time" ? '<p class="co-renew">Then ' + inr(plan.price) + per(plan.billing) + ', charged automatically until you cancel.</p>' : '') + '</div>' +
+      '<div class="co-fields"><div class="two"><label>Your name<input name="name" autocomplete="name" required></label><label>Phone / WhatsApp<input name="phone" type="tel" inputmode="tel" autocomplete="tel" required></label></div>' +
+        '<label>Email for the receipt<input name="email" type="email" autocomplete="email" required></label>' +
+        '<div class="two"><label>Business name<input name="business" autocomplete="organization"></label><label>City<input name="city" autocomplete="address-level2"></label></div>' +
+        '<label>GSTIN <small>(optional, for a GST invoice)</small><input name="gstin" maxlength="15" autocapitalize="characters"></label></div>' +
+      '<div class="co-out" aria-live="polite"></div><button class="btn btn-accent co-pay" type="submit">Pay ' + inr(total) + ' securely</button>' +
+      '<p class="co-safe">🔒 Payments are handled by Razorpay. We never see your card or UPI details.</p></form>';
+    document.body.appendChild(m); document.body.classList.add("co-open");
+    const f = m.querySelector("form"), out = m.querySelector(".co-out"), btn = m.querySelector(".co-pay");
+    const close = () => { m.remove(); document.body.classList.remove("co-open"); };
+    m.addEventListener("click", e => { if (e.target === m || e.target.closest("[data-co=close]")) close(); });
+    m.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+    setTimeout(() => f.querySelector("input").focus(), 50);
+    const done = (no, status) => {
+      f.innerHTML = '<button type="button" class="co-x" data-co="close" aria-label="Close">×</button><div class="co-done"><span class="co-check">✓</span><h2>Payment successful</h2><p>Thank you! Your order number is <b>' + esc(no) + '</b>.</p><p>We\'ve emailed your receipt and our team will contact you shortly to set things up.</p>' +
+        (st.whatsapp ? '<a class="btn btn-accent" href="' + esc(waLink("Hi " + st.brand + ", I just bought " + x.name + " (order " + no + ").")) + '" target="_blank" rel="noopener">Message us on WhatsApp</a>' : '') + '<button type="button" class="btn btn-ghost-dark" data-co="close">Close</button></div>';
+    };
+    f.addEventListener("submit", async e => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(f).entries());
+      if (!String(d.name || "").trim()) { out.innerHTML = '<p class="err">Please add your name.</p>'; return; }
+      if (String(d.phone || "").replace(/\D/g, "").length < 10) { out.innerHTML = '<p class="err">Please add a valid phone number.</p>'; return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(d.email || "").trim())) { out.innerHTML = '<p class="err">Please add a valid email for your receipt.</p>'; return; }
+      btn.disabled = true; btn.textContent = "Opening secure payment…"; out.innerHTML = "";
+      try {
+        const [r] = await Promise.all([fetch(window.VB_SUPABASE.url + "/functions/v1/store/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product: x.slug, plan: parsePlans(x.plans).findIndex(p => p.name === plan.name && p.price === plan.price), customer: d }) }), loadRzp()]);
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || "Couldn't start the payment.");
+        const rz = new window.Razorpay({
+          key: j.key, name: j.name, description: j.description, image: location.origin + "/assets/brand/apple-touch-icon.png",
+          ...(j.mode === "order" ? { order_id: j.order_id, amount: j.amount, currency: j.currency } : { subscription_id: j.subscription_id }),
+          prefill: j.prefill, notes: j.notes, theme: { color: "#F7941D" },
+          handler: async resp => {
+            out.innerHTML = '<p>Confirming your payment…</p>';
+            try {
+              const v = await fetch(window.VB_SUPABASE.url + "/functions/v1/store/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order_no: j.order_no, ...resp }) });
+              const vj = await v.json();
+              if (!v.ok) throw new Error(vj.error);
+              done(j.order_no, vj.status);
+            } catch (err) { out.innerHTML = '<p class="err">' + esc(err.message || "We couldn't confirm the payment.") + '</p>'; btn.disabled = false; btn.textContent = "Pay " + inr(total) + " securely"; }
+          },
+          modal: { ondismiss: () => { btn.disabled = false; btn.textContent = "Pay " + inr(total) + " securely"; } },
+        });
+        rz.on("payment.failed", resp => { out.innerHTML = '<p class="err">Payment failed: ' + esc((resp.error && resp.error.description) || "please try again") + '. No money was taken for this attempt.</p>'; });
+        rz.open();
+      } catch (err) {
+        out.innerHTML = '<p class="err">' + esc(err.message) + '</p>'; btn.disabled = false; btn.textContent = "Pay " + inr(total) + " securely";
+      }
+    });
+  }
+
   /* ---------- events ---------- */
   document.addEventListener("click", e => {
     const a = e.target.closest("a");
     if (!a || e.metaKey || e.ctrlKey || e.shiftKey || a.target === "_blank") return;
     if (a.dataset.post) { e.preventDefault(); showPost(a.dataset.post, true); return; }
     if (a.dataset.offer) { e.preventDefault(); showOffer(a.dataset.offer, true); return; }
+    if (a.dataset.product) { e.preventDefault(); showProduct(a.dataset.product, true); return; }
     if (a.dataset.jump) { e.preventDefault(); const el = document.getElementById(a.dataset.jump); if (el) { el.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); const f = el.querySelector("input"); if (f) setTimeout(() => f.focus({ preventScroll: true }), 400); } return; }
     if (a.dataset.sec === "top") { e.preventDefault(); showHome("", true); window.scrollTo(0, 0); return; }
     if (a.dataset.sec || (a.getAttribute("href") || "").startsWith("/#")) {
       e.preventDefault();
       const id = a.dataset.sec || a.getAttribute("href").slice(2);
-      if (!$("articleView").hidden || !$("offerView").hidden) showHome(id, true);
+      if (!$("articleView").hidden || !$("offerView").hidden || !$("productView").hidden) showHome(id, true);
       else { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); history.replaceState({}, "", "/#" + id); }
       if (a.dataset.service) { const o = [...$("fSvc").options].find(x => x.value === a.dataset.service); if (o) $("fSvc").value = o.value; }
       $("nav").classList.remove("open"); $("menuBtn").setAttribute("aria-expanded", "false");
@@ -402,8 +548,9 @@ function vbStart() {
   window.addEventListener("resize", setStepCols);
 
   /* ---------- boot ---------- */
-  renderChrome(); renderHero(); renderSections(); renderOffers(); renderWidget();
+  renderChrome(); renderHero(); renderSections(); renderOffers(); renderStore(); renderWidget();
   if (window.__POST__ && showPost(window.__POST__, false)) { /* article view */ }
+  else if (window.__PRODUCT__ && showProduct(window.__PRODUCT__, false)) { /* product page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
 }

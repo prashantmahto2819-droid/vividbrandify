@@ -6,7 +6,7 @@
 const SB_URL = "https://twyrrvncbpzmgzkyhdei.supabase.co";
 const SB_KEY = "sb_publishable_dOKrZHex5JvjDOwn8OlV7A_y5vMotAm";
 const OBJECTS = ["settings", "theme", "seo", "widget", "code"];
-const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers"];
+const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products"];
 
 async function loadContent() {
   const res = await fetch(SB_URL + "/rest/v1/site_content?select=key,value", {
@@ -22,6 +22,7 @@ async function loadContent() {
   c.seo.siteUrl = c.seo.siteUrl || "";
   c.posts = c.posts.map(p => Object.assign({ body: "", excerpt: "", date: "" }, p));
   c.offers = c.offers.map(o => Object.assign({ title: "", subtitle: "", slug: "", image: "", endDate: "", startDate: "" }, o));
+  c.products = c.products.map(x => Object.assign({ name: "", slug: "", tagline: "", summary: "", image: "", plans: "" }, x));
   return c;
 }
 
@@ -44,6 +45,7 @@ function publicContent(c) {
     posts: c.posts.filter(p => p.published).sort((a, b) => b.date.localeCompare(a.date)),
     faqs: c.faqs,
     offers: c.offers.filter(o => o.published),
+    products: c.products.filter(x => x.published),
     widget: c.widget.mode === 'built-in' ? { ...c.widget, customCode: undefined } : { mode: c.widget.mode },
   };
 }
@@ -51,15 +53,15 @@ function publicContent(c) {
 const siteBase = (c, origin) => (c.seo.siteUrl || origin || '').replace(/\/$/, '');
 const absUrl = (base, p) => !p ? '' : /^https?:\/\//.test(p) ? p : base + p;
 
-function render(TEMPLATE, c, { post = null, offer = null, origin = '' } = {}) {
+function render(TEMPLATE, c, { post = null, offer = null, product = null, origin = '' } = {}) {
   const data = publicContent(c);
   const { seo, settings, theme, code, widget } = c;
   const base = siteBase(c, origin);
 
-  const title = offer ? `${offer.title} | ${settings.brand}` : post ? `${post.title} | ${settings.brand}` : (seo.title || settings.brand || 'Vivid Brandify');
-  const desc = offer ? (offer.subtitle || offer.headline || seo.description) : post ? post.excerpt : seo.description;
-  const img = absUrl(base, offer && offer.image ? offer.image : post && post.cover ? post.cover : seo.ogImage);
-  const canonical = base + (offer ? '/offer/' + offer.slug : post ? '/blog/' + post.slug : '/');
+  const title = product ? `${product.name} | ${settings.brand}` : offer ? `${offer.title} | ${settings.brand}` : post ? `${post.title} | ${settings.brand}` : (seo.title || settings.brand || 'Vivid Brandify');
+  const desc = product ? (product.tagline || product.summary || seo.description) : offer ? (offer.subtitle || offer.headline || seo.description) : post ? post.excerpt : seo.description;
+  const img = absUrl(base, product && product.image ? product.image : offer && offer.image ? offer.image : post && post.cover ? post.cover : seo.ogImage);
+  const canonical = base + (product ? '/product/' + product.slug : offer ? '/offer/' + offer.slug : post ? '/blog/' + post.slug : '/');
 
   const head = [
     `<title>${esc(title)}</title>`,
@@ -73,7 +75,11 @@ function render(TEMPLATE, c, { post = null, offer = null, origin = '' } = {}) {
     `<meta property="og:url" content="${esc(canonical)}">`,
     img ? `<meta property="og:image" content="${esc(img)}"><meta name="twitter:card" content="summary_large_image">` : '',
     settings.favicon ? `<link rel="icon" href="${esc(settings.favicon)}">` : '',
-    `<script type="application/ld+json">${jsonForScript(post ? {
+    `<script type="application/ld+json">${jsonForScript(product ? {
+      '@context': 'https://schema.org', '@type': 'Product', name: product.name, description: product.tagline || product.summary, image: img || undefined, url: canonical,
+      brand: { '@type': 'Brand', name: settings.brand },
+      offers: lowestPrice(product) ? { '@type': 'Offer', priceCurrency: 'INR', price: lowestPrice(product), availability: 'https://schema.org/InStock', url: canonical } : undefined,
+    } : post ? {
       '@context': 'https://schema.org', '@type': 'BlogPosting', headline: post.title, description: post.excerpt,
       datePublished: post.date, author: { '@type': 'Organization', name: post.author || settings.brand },
       publisher: { '@type': 'Organization', name: settings.brand }, image: img || undefined, mainEntityOfPage: canonical,
@@ -89,7 +95,7 @@ function render(TEMPLATE, c, { post = null, offer = null, origin = '' } = {}) {
   if (theme.hero) vars.push(`--hero:${theme.hero}!important`);
   if (theme.tick) vars.push(`--tick:${theme.tick}!important`);
   const themeCss = `<style>${vars.length ? ':root{' + vars.join(';') + '}' : ''}${code.css ? '\n' + code.css.replace(/<\/style/gi, '') : ''}</style>`;
-  const dataScript = `<script>window.__SITE__=${jsonForScript(data)};window.__POST__=${jsonForScript(post ? post.slug : null)};window.__OFFER__=${jsonForScript(offer ? offer.slug : null)};</script>`;
+  const dataScript = `<script>window.__SITE__=${jsonForScript(data)};window.__POST__=${jsonForScript(post ? post.slug : null)};window.__OFFER__=${jsonForScript(offer ? offer.slug : null)};window.__PRODUCT__=${jsonForScript(product ? product.slug : null)};</script>`;
 
   const noscript = post
     ? `<noscript><article class="wrap article"><h1>${esc(post.title)}</h1><p class="lede">${esc(post.excerpt)}</p>${post.body.split(/\n\s*\n/).map(p => `<p>${esc(p.replace(/^##\s+|^-\s+/gm, ''))}</p>`).join('')}</article></noscript>`
@@ -106,10 +112,16 @@ function render(TEMPLATE, c, { post = null, offer = null, origin = '' } = {}) {
     .replace('<!--BODY_END-->', () => bodyEnd);
 }
 
+function lowestPrice(prod) {
+  const prices = String(prod.plans || '').split('\n').map(l => Number(String(l.split('|')[1] || '').replace(/[^\d.]/g, ''))).filter(n => n > 0);
+  return prices.length ? Math.min(...prices) : 0;
+}
+
 function sitemap(c, origin) {
   const base = siteBase(c, origin);
   const urls = [`<url><loc>${esc(base)}/</loc></url>`]
     .concat(c.posts.filter(p => p.published).map(p => `<url><loc>${esc(base)}/blog/${esc(p.slug)}</loc><lastmod>${p.date}</lastmod></url>`))
+    .concat(c.products.filter(x => x.published && x.slug).map(x => `<url><loc>${esc(base)}/product/${esc(x.slug)}</loc></url>`))
     .concat(c.offers.filter(o => o.published && (!o.endDate || o.endDate >= new Date().toISOString().slice(0, 10))).map(o => `<url><loc>${esc(base)}/offer/${esc(o.slug)}</loc></url>`));
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`;
 }
@@ -132,7 +144,8 @@ export default {
     if (/^\/(README\.md|\.gitignore|docs(\/|$)|supabase(\/|$)|\.git)/i.test(p)) return new Response("Not found", { status: 404 });
     const blog = /^\/blog\/([\w-]+)\/?$/.exec(p);
     const offerM = /^\/offer\/([\w-]+)\/?$/.exec(p);
-    const isPage = isGet && (p === "/" || !!blog || !!offerM);
+    const prodM = /^\/product\/([\w-]+)\/?$/.exec(p);
+    const isPage = isGet && (p === "/" || !!blog || !!offerM || !!prodM);
 
     if (isGet && p === "/robots.txt") {
       try {
@@ -148,6 +161,11 @@ export default {
     if (isPage) {
       try {
         const [c, tpl] = await Promise.all([loadContent(), loadTemplate(env, url.origin)]);
+        if (prodM) {
+          const product = c.products.find(x => x.slug === prodM[1] && x.published);
+          if (product) return new Response(render(tpl, c, { product, origin: url.origin }), { headers: HTML_HEADERS });
+          return new Response(render(tpl, c, { origin: url.origin }), { status: 404, headers: HTML_HEADERS });
+        }
         if (offerM) {
           const offer = c.offers.find(x => x.slug === offerM[1] && x.published);
           if (offer) return new Response(render(tpl, c, { offer, origin: url.origin }), { headers: HTML_HEADERS });
@@ -161,7 +179,7 @@ export default {
         return new Response(render(tpl, c, { origin: url.origin }), { headers: HTML_HEADERS });
       } catch (err) {
         console.error(err);
-        return env.ASSETS.fetch(blog || offerM ? new Request(url.origin + "/", request) : request);
+        return env.ASSETS.fetch(blog || offerM || prodM ? new Request(url.origin + "/", request) : request);
       }
     }
     return env.ASSETS.fetch(request);

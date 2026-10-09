@@ -105,6 +105,27 @@ const SCHEMA = {
     fields: [['q', 'text', 'Question'], ['a', 'textarea', 'Answer']],
     blank: { q: 'New question', a: '' },
   },
+  products: {
+    kind: 'list', group: 'Store', label: 'Products & plans', noun: 'product', titleField: 'name',
+    help: 'Apps and software you sell online. Each product gets its own page at /product/your-slug where customers pick a plan and pay with Razorpay (UPI, cards, netbanking). Switch on payments under Store → Payments & email.',
+    fields: [
+      ['published', 'check', 'Published', { hint: 'Untick to keep as a draft' }],
+      ['name', 'text', 'Product name', { hint: 'e.g. WhatsApp Marketing Software' }],
+      ['slug', 'text', 'URL slug', { hint: 'Leave empty to create from the name. Page address: /product/your-slug' }],
+      ['category', 'text', 'Category', { hint: 'Small label, e.g. WhatsApp software, CRM, Website package' }],
+      ['tagline', 'text', 'One-line pitch', { hint: 'Also used for Google and WhatsApp link previews' }],
+      ['summary', 'textarea', 'Short description'],
+      ['features', 'lines', 'Features', { hint: 'One per line' }],
+      ['plans', 'lines', 'Plans and prices', { hint: 'One plan per line: Plan name | price | monthly, yearly or one-time | setup fee | note.  e.g.  Starter | 999 | monthly | 2999 | 1 user, 5,000 messages.  Prices in rupees. Setup fee and note are optional' }],
+      ['badge', 'text', 'Badge', { hint: 'Optional, e.g. Most popular' }],
+      ['icon', 'select', 'Icon (when there is no image)', { choices: ICONS }],
+      ['image', 'image', 'Product image or screenshot'],
+      ['details', 'tall', 'More details', { hint: 'Optional. Blank line between paragraphs. ## Heading, - bullet' }],
+      ['buyLabel', 'text', 'Buy button label', { hint: 'Default: Buy now' }],
+      ['demo', 'check', 'Show a "Book a free demo" button'],
+    ],
+    blank: { published: false, plans: '', icon: 'software', demo: true },
+  },
   sections: {
     kind: 'list', group: 'Layout', label: 'Sections & menu', noun: 'section', titleField: 'label', fixed: true,
     help: 'Reorder the home page sections, hide any of them, and set their menu labels and headings.',
@@ -193,7 +214,7 @@ const SCHEMA = {
   },
 };
 
-const SECTION_IDS = ['stats', 'services', 'process', 'reviews', 'blog', 'faq', 'contact'];
+const SECTION_IDS = ['stats', 'services', 'store', 'process', 'reviews', 'blog', 'faq', 'contact'];
 const IMAGE_RE = /^(\/uploads\/[A-Za-z0-9._-]+|\/assets\/[A-Za-z0-9._\/-]+|https:\/\/[^\s"'<>]+)$/;
 
 function slugify(s) {
@@ -241,10 +262,10 @@ function sanitize(key, value, previous) {
     for (const p of previous || []) if (!byId.has(p.id)) byId.set(p.id, p);
     items = [...byId.values()];
   }
-  if (key === 'posts' || key === 'offers') {
+  if (key === 'posts' || key === 'offers' || key === 'products') {
     const seen = new Set();
     for (const p of items) {
-      let s = slugify(p.slug || p.title), base = s, n = 2;
+      let s = slugify(p.slug || p.title || p.name), base = s, n = 2;
       while (seen.has(s)) s = base + '-' + n++;
       seen.add(s); p.slug = s;
       if (key === 'posts' && !p.date) p.date = new Date().toISOString().slice(0, 10);

@@ -78,6 +78,12 @@
       if (c[k] === undefined) c[k] = SCHEMA[k].kind === "list" ? [] : sanitize(k, {});
       else if (SCHEMA[k].kind === "object") c[k] = Object.assign(sanitize(k, {}), c[k]);
     }
+    // sections added in later versions (e.g. the store) appear after services until the admin reorders them
+    const DEF = { store: { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." } };
+    if (Array.isArray(c.sections)) for (const id of Object.keys(DEF)) if (!c.sections.some(x => x.id === id)) {
+      const at = c.sections.findIndex(x => x.id === "services");
+      c.sections.splice(at < 0 ? c.sections.length : at + 1, 0, DEF[id]);
+    }
     cache = c;
     return c;
   }
@@ -232,6 +238,20 @@
         return { ok: true };
       }
 
+      case "GET orders": return (await req("/rest/v1/orders?select=*&order=created_at.desc&limit=1000")) || [];
+      case "PATCH orders": {
+        const patch = {};
+        if (body.status !== undefined) patch.status = body.status;
+        if (body.notes !== undefined) patch.notes = String(body.notes).slice(0, 2000);
+        patch.updated_at = new Date().toISOString();
+        const out = await req("/rest/v1/orders?id=eq." + encodeURIComponent(id), { method: "PATCH", body: patch, headers: { Prefer: "return=representation" } });
+        if (!out || !out.length) throw new ApiError(403, "Only admins can change orders.");
+        return out[0];
+      }
+      case "GET store-settings": return (await rpc("get_store_settings", {})) || {};
+      case "PUT store-settings": return await rpc("save_store_settings", { p: body });
+      case "GET mail-log": return (await rpc("mail_log", { p_limit: 30 })) || [];
+      case "POST test-mail": return await req("/functions/v1/store/test-mail", { method: "POST", body: { to: body.to } });
       case "GET automation": return (await rpc("get_automation", {})) || {};
       case "PUT automation": return await rpc("save_automation", { p: body });
       case "POST automation-sample": return { requestId: await rpc("send_automation_sample", { p_kind: body.kind, p_phone: body.phone }) };

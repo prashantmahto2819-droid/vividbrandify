@@ -58,24 +58,25 @@
   function fld(id, label, input) { return '<div class="fld"><label for="' + id + '">' + esc(label) + '</label>' + input + '</div>'; }
 
   async function loadAll() {
-    const [schema, content, leads, media, dash] = await Promise.all([api("GET", "schema"), api("GET", "content"), api("GET", "leads"), api("GET", "media"), api("GET", "dashboard")]);
-    Object.assign(S, { schema, content, leads, media, dash });
+    const [schema, content, leads, media, dash, orders] = await Promise.all([api("GET", "schema"), api("GET", "content"), api("GET", "leads"), api("GET", "media"), api("GET", "dashboard"), api("GET", "orders").catch(() => [])]);
+    Object.assign(S, { schema, content, leads, media, dash, orders });
   }
 
   /* ---------- shell ---------- */
   const NAV = [
     ["", [["dashboard", "Dashboard"]]],
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
+    ["Store", [["products"], ["orders", "Orders"], ["payments", "Payments & email"]]],
     ["Layout", [["sections"]]],
     ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
     ["Site", [["settings"], ["theme"], ["seo"]]],
     ["Advanced", [["code"], ["media", "Media library"], ["account", "Account & backup"]]],
   ];
   const isStaff = () => !!(S.user && S.user.role === "staff");
-  const STAFF_NAV = [["", [["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"]]], ["You", [["account", "My account"]]]];
-  const STAFF_VIEWS = ["dashboard", "leads", "account"];
+  const STAFF_NAV = [["", [["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
+  const STAFF_VIEWS = ["dashboard", "leads", "orders", "account"];
   const labelOf = v => (isStaff() && v === "account") ? "My account" : baseLabel(v);
-  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation" })[v] || v;
+  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
 
   function renderShell() {
     const newLeads = S.leads.filter(l => l.status === "new").length;
@@ -88,6 +89,8 @@
   }
   function previewHref() {
     if (S.view === "posts" && S.sel && S.draft) { const p = S.draft.find(x => x.id === S.sel); if (p && p.slug && p.published) return "/blog/" + encodeURIComponent(p.slug); }
+    if (S.view === "products" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/product/" + encodeURIComponent(o.slug); }
+    if (S.view === "orders" || S.view === "payments") return "/#store";
     if (S.view === "offers" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/offer/" + encodeURIComponent(o.slug); }
     const map = { services: "services", steps: "process", testimonials: "reviews", posts: "blog", faqs: "faq" };
     return "/" + (map[S.view] ? "#" + map[S.view] : "");
@@ -103,6 +106,8 @@
     if (S.view === "media") return renderMedia(c);
     if (S.view === "account") return renderAccount(c);
     if (S.view === "automation") return renderAutomation(c);
+    if (S.view === "orders") return renderOrders(c);
+    if (S.view === "payments") return renderPayments(c);
     if (sc) {
       if (!S.draft) S.draft = clone(S.content[S.view]);
       if (sc.kind === "list") renderListEditor(c, sc); else renderObjectEditor(c, sc);
@@ -115,6 +120,7 @@
     S.view = v; S.sel = null; S.draft = null; S.dirty = false; S.pendingDel = null;
     if (v === "dashboard") { S.dash = await api("GET", "dashboard").catch(() => S.dash); S.leads = await api("GET", "leads").catch(() => S.leads); }
     if (v === "leads") S.leads = await api("GET", "leads").catch(() => S.leads);
+    if (v === "orders" || v === "dashboard") S.orders = await api("GET", "orders").catch(() => S.orders);
     renderShell();
     window.scrollTo(0, 0);
   }
@@ -197,12 +203,12 @@
     const t = it[sc.titleField] || "(untitled)";
     let tags = "";
     if (S.view === "slides" && !it.active) tags += '<span class="tagp off">hidden</span>';
-    if (S.view === "posts" && !it.published) tags += '<span class="tagp off">draft</span>';
+    if ((S.view === "posts" || S.view === "products") && !it.published) tags += '<span class="tagp off">draft</span>';
     if (S.view === "testimonials" && it.sample) tags += '<span class="tagp warn">sample</span>';
     if (S.view === "sections" && !it.visible) tags += '<span class="tagp off">hidden</span>';
     if (S.view === "services" && it.featured) tags += '<span class="tagp warn">featured</span>';
     if (S.view === "offers") { const os = offerStatus(it); tags += '<span class="tagp ' + (os === "live" ? "live" : os === "draft" || os === "ended" ? "off" : "warn") + '">' + os + '</span>'; }
-    return esc(t) + tags + (S.view === "posts" ? '<small>' + esc(it.date) + ' · /blog/' + esc(it.slug || "…") + '</small>' : S.view === "offers" ? '<small>' + esc(it.startDate || "now") + ' → ' + esc(it.endDate || "no end date") + ' · /offer/' + esc(it.slug || "…") + '</small>' : '');
+    return esc(t) + tags + (S.view === "posts" ? '<small>' + esc(it.date) + ' · /blog/' + esc(it.slug || "…") + '</small>' : S.view === "offers" ? '<small>' + esc(it.startDate || "now") + ' → ' + esc(it.endDate || "no end date") + ' · /offer/' + esc(it.slug || "…") + '</small>' : S.view === "products" ? '<small>' + String(it.plans || "").split("\n").filter(l => l.trim()).length + ' plan(s) · /product/' + esc(it.slug || "…") + '</small>' : '');
   }
   const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   function offerStatus(o) {
@@ -216,6 +222,7 @@
     const m = /^\/offer\/([\w-]+)/.exec(l.source || "");
     if (m) { const o = (S.content.offers || []).find(x => x.slug === m[1]); return "Offer page: " + (o ? o.title : m[1]); }
     if (/^\/blog\//.test(l.source || "")) return "Blog article";
+    if (/^\/product\//.test(l.source || "")) return "Online purchase";
     return "Website contact form";
   }
   const waNum = p => String(p || "").replace(/\D/g, "").replace(/^0+/, "").replace(/^(\d{10})$/, "91$1");
@@ -375,10 +382,120 @@
     c.classList.add("dash");
     c.innerHTML = heroBand(s, staff) + kpiRow(s) +
       '<div class="d-grid g-21">' + trendChart() + pipelineCard(s) + '</div>' +
-      '<div class="d-grid g-21">' + latestCard(staff ? 8 : 6) + '<div class="d-stack">' + followUpCard() + (staff ? '' : offersCard()) + '</div></div>' +
+      '<div class="d-grid g-21">' + latestCard(staff ? 8 : 6) + '<div class="d-stack">' + followUpCard() + ((S.orders || []).length || (S.content.products || []).length ? salesCard() : '') + (staff ? '' : offersCard()) + '</div></div>' +
       '<div class="d-grid g-3">' + breakdown("What they want", "service", "Services leads ask about will show here.", "service") + breakdown("Business categories", "businessType", "Leads pick a category on the enquiry form.", "type") + breakdown("Top cities", "city", "Cities from the enquiry form will show here.", "q") + '</div>' +
       (staff ? '' : '<div class="d-grid g-3">' + autoCard() + breakdown("Where leads come from", "source", "Sources will show here.", "") + healthCard() + '</div>' + contentCard());
     if (!staff && !S.autoCfg) api("GET", "automation").then(a => { S.autoCfg = a || {}; const el = document.getElementById("autoCard"); if (el && S.view === "dashboard") el.outerHTML = autoCard(); }).catch(() => { const el = document.getElementById("autoCard"); if (el) el.querySelector(".help").textContent = "Couldn't load automation settings."; });
+  }
+
+  /* ---------- store: orders ---------- */
+  const inr = p => "₹" + (Number(p || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  const ORDER_ST = { created: ["Not paid", "off"], paid: ["Paid", "live"], active: ["Active", "live"], failed: ["Failed", "bad"], cancelled: ["Cancelled", "off"], halted: ["Payment issue", "warn"], completed: ["Completed", "off"], refunded: ["Refunded", "warn"] };
+  const isPaid = o => ["paid", "active", "cancelled", "completed", "halted"].includes(o.status) && o.amount_paid > 0;
+  function salesStats() {
+    const O = S.orders || [], m0 = new Date(); m0.setDate(1); m0.setHours(0, 0, 0, 0);
+    const paid = O.filter(isPaid);
+    return {
+      revenue: paid.reduce((a, o) => a + o.amount_paid, 0),
+      month: paid.filter(o => Date.parse(o.last_payment_at || o.created_at) >= m0.getTime()).reduce((a, o) => a + (Date.parse(o.created_at) >= m0.getTime() ? o.amount_paid : o.price), 0),
+      subs: O.filter(o => o.status === "active").length,
+      mrr: O.filter(o => o.status === "active").reduce((a, o) => a + (o.billing === "monthly" ? o.price : o.billing === "yearly" ? Math.round(o.price / 12) : 0), 0),
+      orders: paid.length, pending: O.filter(o => o.status === "created").length,
+    };
+  }
+  function renderOrders(c) {
+    const f = S.orderFilter || (S.orderFilter = { q: "", status: "paid", product: "" }), q = f.q.toLowerCase(), O = S.orders || [];
+    const st = salesStats();
+    const rows = O.filter(o => (!f.status || (f.status === "paid" ? isPaid(o) : o.status === f.status)) && (!f.product || o.product_slug === f.product) &&
+      (!q || [o.order_no, o.customer_name, o.email, o.phone, o.business, o.gstin, o.city].join(" ").toLowerCase().includes(q)));
+    const products = [...new Map(O.map(o => [o.product_slug, o.product_name])).entries()];
+    c.innerHTML = '<div class="d-kpis">' +
+      '<div class="card d-kpi tone-c">' + ico("chart") + '<span class="d-kl">Total sales</span><b>' + inr(st.revenue) + '</b><span class="d-delta flat">' + st.orders + ' paid order' + (st.orders === 1 ? "" : "s") + '</span></div>' +
+      '<div class="card d-kpi tone-a">' + ico("inbox") + '<span class="d-kl">This month</span><b>' + inr(st.month) + '</b><span class="d-delta flat">Since the 1st</span></div>' +
+      '<div class="card d-kpi tone-b">' + ico("trophy") + '<span class="d-kl">Active subscriptions</span><b>' + st.subs + '</b><span class="d-delta flat">' + inr(st.mrr) + ' a month recurring</span></div>' +
+      '<div class="card d-kpi tone-d">' + ico("bell") + '<span class="d-kl">Started, not paid</span><b>' + st.pending + '</b><span class="d-delta flat">Follow up: they left at checkout</span></div></div>' +
+      '<div class="filters"><input type="search" id="oq" placeholder="Search order, name, phone, GSTIN…" value="' + esc(f.q) + '" aria-label="Search orders">' +
+      '<select id="ost" aria-label="Filter by status"><option value="">All orders</option><option value="paid"' + (f.status === "paid" ? " selected" : "") + '>Paid orders</option>' + Object.entries(ORDER_ST).map(([k, v]) => '<option value="' + k + '"' + (f.status === k ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select>' +
+      '<select id="oprod" aria-label="Filter by product"><option value="">All products</option>' + products.map(([k, v]) => '<option value="' + esc(k) + '"' + (f.product === k ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
+      '<span class="help">' + rows.length + ' of ' + O.length + '</span><span style="flex:1"></span><button class="btn btn-s btn-sm" data-act="ocsv"' + (rows.length ? "" : " disabled") + '>Export CSV</button></div>' +
+      (rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Product</th><th>Paid</th><th>Status</th><th>Notes</th></tr></thead><tbody>' + rows.map(o => {
+        const s = ORDER_ST[o.status] || [o.status, "off"];
+        return '<tr><td>' + new Date(o.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '<div class="sub">' + new Date(o.created_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) + '</div></td>' +
+          '<td><b style="font-family:var(--mono);font-size:13px">' + esc(o.order_no) + '</b>' + (o.rzp_payment_id ? '<div class="sub">' + esc(o.rzp_payment_id) + '</div>' : '') + '</td>' +
+          '<td><b>' + esc(o.customer_name) + '</b>' + (o.business ? '<div class="sub">' + esc(o.business) + (o.city ? " · " + esc(o.city) : "") + '</div>' : '') + '<div class="sub"><a href="tel:' + esc(o.phone) + '">' + esc(o.phone) + '</a> · <a href="https://wa.me/' + waNum(o.phone) + '" target="_blank" rel="noopener">WhatsApp</a></div><div class="sub"><a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a></div>' + (o.gstin ? '<div class="sub">GSTIN ' + esc(o.gstin) + '</div>' : '') + '</td>' +
+          '<td>' + esc(o.product_name) + '<div class="sub">' + esc(o.plan_name) + ' · ' + (o.billing === "one-time" ? "one-time" : o.billing) + '</div><div class="sub">' + inr(o.price) + (o.setup_fee ? " + " + inr(o.setup_fee) + " setup" : "") + '</div></td>' +
+          '<td><b>' + inr(o.amount_paid) + '</b>' + (o.payments > 1 ? '<div class="sub">' + o.payments + ' payments</div>' : '') + (o.next_charge_at && o.status === "active" ? '<div class="sub">Next ' + new Date(o.next_charge_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
+          '<td>' + (isStaff() ? '<span class="tagp ' + s[1] + '">' + s[0] + '</span>' : '<select class="st ost-' + s[1] + '" data-ostatus="' + o.id + '" aria-label="Order status">' + Object.entries(ORDER_ST).map(([k, v]) => '<option value="' + k + '"' + (k === o.status ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select>') + '</td>' +
+          '<td>' + (isStaff() ? '<div class="msg">' + esc(o.notes) + '</div>' : '<textarea class="lead-notes" data-onotes="' + o.id + '" aria-label="Notes">' + esc(o.notes) + '</textarea>') + '</td></tr>';
+      }).join("") + '</tbody></table></div>'
+        : '<div class="empty">' + (O.length ? "No orders match this filter." : "No orders yet. When customers buy from your Software pages, their orders appear here. Set up payments under Store → Payments & email.") + '</div>');
+  }
+  function exportOrders() {
+    const cols = ["created_at", "order_no", "status", "customer_name", "phone", "email", "business", "gstin", "city", "product_name", "plan_name", "billing", "price", "setup_fee", "amount_paid", "payments", "rzp_payment_id", "rzp_subscription_id", "notes"];
+    const cell = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const money = ["price", "setup_fee", "amount_paid"];
+    const csv = [cols.join(",")].concat((S.orders || []).map(o => cols.map(k => cell(money.includes(k) ? (o[k] / 100).toFixed(2) : o[k])).join(","))).join("\r\n");
+    download(new Blob(["﻿" + csv], { type: "text/csv" }), "orders-" + new Date().toISOString().slice(0, 10) + ".csv");
+  }
+
+  /* ---------- store: payments & email settings ---------- */
+  async function renderPayments(c) {
+    c.innerHTML = '<div class="empty">Loading…</div>';
+    let cfg, log;
+    try { [cfg, log] = await Promise.all([api("GET", "store-settings"), api("GET", "mail-log").catch(() => [])]); }
+    catch (err) { c.innerHTML = '<div class="empty">' + esc(err.message) + '</div>'; return; }
+    const hook = window.VB_SUPABASE.url + "/functions/v1/store/webhook";
+    const mode = /^rzp_live_/.test(cfg.razorpay_key_id || "") ? ["Live mode", "live"] : /^rzp_test_/.test(cfg.razorpay_key_id || "") ? ["Test mode", "warn"] : ["Not set up", "off"];
+    const sec = (id, label, set, hint) => '<div class="fld"><label for="' + id + '">' + label + (set ? ' <span class="tagp live">saved</span>' : '') + '</label><input type="password" id="' + id + '" autocomplete="off" placeholder="' + (set ? esc(cfg[id]) + "  (leave empty to keep)" : "Paste here") + '"><span class="hint">' + hint + '</span></div>';
+    const chk = (id, label, hint) => '<label class="chk" for="' + id + '"><input type="checkbox" id="' + id + '"' + (cfg[id] ? " checked" : "") + '><span>' + label + (hint ? '<span class="hint">' + hint + '</span>' : '') + '</span></label>';
+    const txt = (id, label, ph, hint) => '<div class="fld"><label for="' + id + '">' + label + '</label><input type="text" id="' + id + '" value="' + esc(cfg[id] || "") + '" placeholder="' + esc(ph || "") + '">' + (hint ? '<span class="hint">' + hint + '</span>' : '') + '</div>';
+    const area = (id, label, ph, rows) => '<div class="fld"><label for="' + id + '">' + label + '</label><textarea id="' + id + '" rows="' + (rows || 5) + '" placeholder="' + esc(ph) + '">' + esc(cfg[id] || "") + '</textarea></div>';
+    c.innerHTML = '<div class="pay-grid">' +
+      '<div class="card form"><div class="d-card-h"><h2>Razorpay payments</h2><span class="tagp ' + mode[1] + '">' + mode[0] + '</span></div>' +
+        '<p class="help">Customers pay on your Software pages with UPI, cards, netbanking or wallets. Monthly and yearly plans renew automatically.</p>' +
+        chk("store_on", "Take payments on the website", "When off, Buy buttons send people to the enquiry form instead") +
+        txt("razorpay_key_id", "Key ID", "rzp_live_…", "Razorpay Dashboard → Account & Settings → API Keys. Start with a Test key, then switch to Live.") +
+        sec("razorpay_key_secret", "Key Secret", cfg.razorpay_key_secret_set, "Shown once when you generate the key. Stored securely; it never reaches the website.") +
+        sec("razorpay_webhook_secret", "Webhook secret", cfg.razorpay_webhook_secret_set, "The secret you type when adding the webhook below.") +
+        '<div class="fld"><label>Webhook URL <button type="button" class="btn btn-g btn-sm" data-copy="' + esc(hook) + '">Copy</button></label><code class="codebox">' + esc(hook) + '</code>' +
+          '<span class="hint">Razorpay → Account & Settings → Webhooks → Add new webhook. Paste this URL, set a secret, and tick: payment.captured, payment.failed, subscription.activated, subscription.charged, subscription.halted, subscription.cancelled, subscription.completed, refund.processed. This keeps renewals and cancellations in sync.</span></div>' +
+        txt("gst_note", "Tax note under prices", "Prices include 18% GST", "Optional. Shown under the plans on every product page.") +
+        '<p class="help" style="font-size:13px">Subscriptions need Razorpay Subscriptions turned on for your account (ask Razorpay support if plans fail to create).</p>' +
+      '</div>' +
+      '<div class="card form"><div class="d-card-h"><h2>Email automation</h2><span class="tagp ' + (cfg.resend_api_key_set && cfg.mail_from ? "live" : "off") + '">' + (cfg.resend_api_key_set && cfg.mail_from ? "Connected" : "Not set up") + '</span></div>' +
+        '<p class="help">Emails are sent through Resend. Add and verify your domain in Resend first so emails land in the inbox, not spam.</p>' +
+        sec("resend_api_key", "Resend API key", cfg.resend_api_key_set, "resend.com → API Keys → Create API key (Sending access).") +
+        txt("mail_from", "Send from", "Vivid Brandify <hello@vividbrandify.com>", "Must use the domain you verified in Resend.") +
+        txt("team_emails", "Team emails for alerts", "you@gmail.com, sales@vividbrandify.com", "Separate with commas.") +
+        '<div class="chk-list">' + chk("mail_lead_reply_on", "Auto-reply to every enquiry", "Goes to the email the visitor typed in the form") +
+        chk("mail_lead_alert_on", "Alert the team about new enquiries") + chk("mail_order_on", "Send a receipt to buyers", "After every successful payment") + chk("mail_order_alert_on", "Alert the team about new orders") + '</div>' +
+        '<div class="fld"><label for="testTo">Send a test email</label><div style="display:flex;gap:8px"><input type="email" id="testTo" placeholder="you@example.com" value="' + esc(S.user.email) + '"><button type="button" class="btn btn-s btn-sm" data-act="testmail">Send test</button></div><span class="hint">Save first, then test.</span></div>' +
+      '</div>' +
+      '<div class="card form span2"><h2>Email wording</h2><p class="help">Leave empty to use the built-in wording. You can use {name}, {brand}, {service}, {whatsapp}, {site}; in receipts also {product}, {plan}, {amount}, {order_no}. A blank line starts a new paragraph.</p>' +
+        '<div class="two">' + '<div>' + txt("lead_reply_subject", "Enquiry auto-reply: subject", "Thanks for contacting {brand}") + area("lead_reply_body", "Enquiry auto-reply: message", "Hi {name},\n\nThanks for your enquiry about {service}. Our team will get back to you within one working day.\n\nIf it's urgent, message us on WhatsApp at {whatsapp}.") + '</div>' +
+        '<div>' + txt("order_subject", "Payment receipt: subject", "Payment received: {product} ({order_no})") + area("order_body", "Payment receipt: message", "Hi {name},\n\nThank you for your purchase. We've received your payment and our team will contact you within one working day to get you set up.\n\nKeep this email as your receipt.") + '</div></div>' +
+      '</div>' +
+      '<div class="card span2"><h2>Recent emails</h2>' + (log.length ? '<div class="tbl-wrap"><table><thead><tr><th>When</th><th>Type</th><th>To</th><th>Subject</th><th>Result</th></tr></thead><tbody>' + log.map(l => '<tr><td>' + new Date(l.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) + '</td><td>' + esc(({ lead_reply: "Enquiry reply", lead_alert: "Enquiry alert", order_receipt: "Receipt", order_alert: "Order alert", test: "Test" })[l.kind] || l.kind) + '</td><td>' + esc(l.recipient) + '</td><td>' + esc(l.subject) + '</td><td>' + (l.ok ? '<span class="tagp live">Sent</span>' : '<span class="tagp warn" title="' + esc(l.error) + '">Failed</span><div class="sub">' + esc(l.error) + '</div>') + '</td></tr>').join("") + '</tbody></table></div>' : '<p class="help">No emails sent yet.</p>') + '</div>' +
+      '</div>';
+    const sb = document.getElementById("savebarSlot");
+    sb.innerHTML = '<div class="savebar"><span>Payment and email settings</span><span style="flex:1"></span><button class="btn btn-p" data-act="savepay">Save settings</button></div>';
+  }
+  async function savePayments() {
+    const v = id => (document.getElementById(id) || {}).value || "", ch = id => !!(document.getElementById(id) || {}).checked;
+    const body = {};
+    ["razorpay_key_id", "gst_note", "mail_from", "team_emails", "lead_reply_subject", "lead_reply_body", "order_subject", "order_body"].forEach(k => body[k] = v(k).trim());
+    ["razorpay_key_secret", "razorpay_webhook_secret", "resend_api_key"].forEach(k => body[k] = v(k).trim());
+    ["store_on", "mail_lead_reply_on", "mail_lead_alert_on", "mail_order_on", "mail_order_alert_on"].forEach(k => body[k] = ch(k));
+    if (body.store_on && !body.razorpay_key_id) return toast("Add your Razorpay Key ID before switching payments on.", true);
+    try { await api("PUT", "store-settings", body); toast("Settings saved."); renderView(); }
+    catch (err) { toast(err.message, true); }
+  }
+  function salesCard() {
+    const st = salesStats(), recent = (S.orders || []).filter(isPaid).slice(0, 4);
+    return '<div class="card"><div class="d-card-h"><h2>Online sales</h2><button class="btn btn-g btn-sm" data-nav="orders">Orders</button></div>' +
+      '<div class="sales-row"><div><b>' + inr(st.month) + '</b><span>This month</span></div><div><b>' + st.subs + '</b><span>Active plans</span></div><div><b>' + inr(st.mrr) + '</b><span>Monthly recurring</span></div></div>' +
+      (recent.length ? '<div class="ofl" style="margin-top:12px">' + recent.map(o => '<div class="ofl-row"><span class="ofl-main"><b>' + esc(o.customer_name) + '</b><small>' + esc(o.product_name) + ' · ' + ago(o.created_at) + '</small></span><b>' + inr(o.amount_paid) + '</b></div>').join("") + '</div>'
+        : '<p class="help" style="margin-top:10px">No sales yet. Add products under Store → Products & plans and switch on payments.</p>') + '</div>';
   }
 
   /* ---------- leads ---------- */
@@ -665,6 +782,10 @@
     if (d.act === "discard") { S.draft = clone(S.content[S.view]); S.dirty = false; S.pendingDel = null; renderView(); return; }
     if (d.act === "csv") return exportCsv();
     if (d.act === "message") return openMessenger();
+    if (d.act === "ocsv") return exportOrders();
+    if (d.act === "savepay") return savePayments();
+    if (d.act === "testmail") { const to = (document.getElementById("testTo") || {}).value || ""; b.disabled = true; try { await api("POST", "test-mail", { to }); toast("Test email sent to " + to + ". Check the inbox (and spam)."); } catch (err) { toast(err.message, true); } b.disabled = false; return; }
+    if (d.copy) { try { await navigator.clipboard.writeText(d.copy); toast("Copied."); } catch (_) { toast("Couldn't copy. Select the text and copy it.", true); } return; }
     if (d.range) { S.dashRange = +d.range; const ch = document.querySelector(".d-chart"); if (ch) ch.outerHTML = trendChart(); return; }
     if (d.lf) { S.leadFilter = { q: "", status: "", type: "", service: "" }; S.leadFilter[d.lf] = d.lv; return navigate("leads"); }
     if (d.act === "newoffer") { await navigate("offers"); const add = document.querySelector('[data-act="add"]'); if (add) add.click(); return; }
@@ -694,6 +815,7 @@
   app.addEventListener("input", e => {
     const t = e.target;
     if (t.id === "lq") { S.leadFilter.q = t.value; const pos = t.selectionStart; renderView(); const n = document.getElementById("lq"); n.focus(); n.setSelectionRange(pos, pos); return; }
+    if (t.id === "oq") { S.orderFilter.q = t.value; const pos = t.selectionStart; renderView(); const n = document.getElementById("oq"); n.focus(); n.setSelectionRange(pos, pos); return; }
     const k = t.dataset.k; if (!k || !S.draft) return;
     const o = currentObj(); if (!o) return;
     o[k] = t.type === "checkbox" ? t.checked : t.type === "number" ? Number(t.value) : t.value;
@@ -709,6 +831,16 @@
     if (t.id === "ls") { S.leadFilter.status = t.value; renderView(); return; }
     if (t.id === "ltype") { S.leadFilter.type = t.value; renderView(); return; }
     if (t.id === "lsvc") { S.leadFilter.service = t.value; renderView(); return; }
+    if (t.id === "ost") { S.orderFilter.status = t.value; renderView(); return; }
+    if (t.id === "oprod") { S.orderFilter.product = t.value; renderView(); return; }
+    if (t.dataset.ostatus) {
+      try { const o = await api("PATCH", "orders/" + t.dataset.ostatus, { status: t.value }); Object.assign(S.orders.find(x => x.id === o.id), o); toast("Order updated."); renderView(); } catch (err) { toast(err.message, true); }
+      return;
+    }
+    if (t.dataset.onotes) {
+      try { await api("PATCH", "orders/" + t.dataset.onotes, { notes: t.value }); S.orders.find(x => x.id === t.dataset.onotes).notes = t.value; toast("Note saved."); } catch (err) { toast(err.message, true); }
+      return;
+    }
     if (t.dataset.lstatus) {
       try { const l = await api("PATCH", "leads/" + t.dataset.lstatus, { status: t.value }); Object.assign(S.leads.find(x => x.id === l.id), l); t.className = "st st-" + l.status; toast("Status updated."); } catch (err) { toast(err.message, true); }
       return;
