@@ -586,11 +586,13 @@ function vbStart() {
   else if (window.__PRODUCT__ && showProduct(window.__PRODUCT__, false)) { /* product page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
+  document.documentElement.classList.remove("vb-boot");
 }
 
 if (window.__SITE__) vbStart();
 else if (window.VBContent) window.VBContent.load().then(data => { window.__SITE__ = data; vbStart(); }).catch(err => {
   console.error(err);
   const m = document.getElementById("slides");
+  document.documentElement.classList.remove("vb-boot");
   if (m) m.innerHTML = '<div class="slide on"><div class="slide-copy"><h1>We\'ll be right back</h1><p>The site couldn\'t load its content. Please refresh the page in a moment.</p></div></div>';
 });

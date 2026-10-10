@@ -7,7 +7,7 @@
   const clone = o => JSON.parse(JSON.stringify(o));
   const TICK = '<svg viewBox="0 0 18 11"><path d="M1 6l3.5 3.5L11 2"/><path d="M7 9.5L15.5 1"/></svg>';
 
-  const S = { user: null, schema: null, content: null, view: "dashboard", sel: null, draft: null, dirty: false, leads: [], media: [], dash: null, pendingDel: null, leadFilter: { q: "", status: "", type: "", service: "" } };
+  const S = { user: null, schema: null, content: null, view: "dashboard", sel: null, draft: null, dirty: false, leads: [], media: [], dash: null, pendingDel: null, leadFilter: { q: "", status: "", stage: "", type: "", service: "", priority: "", owner: "" } };
 
   /* ---------- API ---------- */
   async function api(method, path, body) {
@@ -60,6 +60,7 @@
   async function loadAll() {
     const [schema, content, leads, media, dash, orders, payments] = await Promise.all([api("GET", "schema"), api("GET", "content"), api("GET", "leads"), api("GET", "media"), api("GET", "dashboard"), api("GET", "orders").catch(() => []), api("GET", "order-payments").catch(() => [])]);
     Object.assign(S, { schema, content, leads, media, dash, orders, payments });
+    [S.team, S.crm] = await Promise.all([api("GET", "team-directory").catch(() => []), api("GET", "crm-settings").catch(() => ({}))]);
   }
 
   /* ---------- shell ---------- */
@@ -117,7 +118,7 @@
 
   async function navigate(v) {
     if (S.dirty && !(await confirmLeave())) return;
-    S.view = v; S.sel = null; S.draft = null; S.dirty = false; S.pendingDel = null;
+    S.view = v; S.sel = null; S.draft = null; S.dirty = false; S.pendingDel = null; closeLead();
     if (v === "dashboard") { S.dash = await api("GET", "dashboard").catch(() => S.dash); S.leads = await api("GET", "leads").catch(() => S.leads); }
     if (v === "leads") S.leads = await api("GET", "leads").catch(() => S.leads);
     if (v === "orders" || v === "dashboard") { S.orders = await api("GET", "orders").catch(() => S.orders); S.payments = await api("GET", "order-payments").catch(() => S.payments); }
@@ -228,7 +229,7 @@
   const waNum = p => String(p || "").replace(/\D/g, "").replace(/^0+/, "").replace(/^(\d{10})$/, "91$1");
   function followUpsDue() {
     const t = todayStr();
-    return S.leads.filter(l => l.followUpOn && l.followUpOn <= t && l.status !== "won" && l.status !== "lost").sort((a, b) => a.followUpOn.localeCompare(b.followUpOn));
+    return S.leads.filter(l => l.followUpOn && l.followUpOn <= t && l.stage !== "won" && l.stage !== "lost").sort((a, b) => a.followUpOn.localeCompare(b.followUpOn));
   }
   function followUpCard() {
     const due = followUpsDue();
@@ -275,9 +276,13 @@
     const inLast = (from, to) => L.filter(l => { const x = now - Date.parse(l.createdAt); return x >= from * D && x < to * D; }).length;
     const due = followUpsDue();
     return {
-      total: L.length, fresh: L.filter(l => l.status === "new").length,
+      total: L.length, fresh: L.filter(l => l.stage === "new").length,
+      waiting: L.filter(l => waitInfo(l)), late: L.filter(l => { const w = waitInfo(l); return w && w.late; }).length,
+      avgReply: (() => { const r = L.filter(l => l.firstResponseAt && now - Date.parse(l.createdAt) < 30 * D).map(l => (Date.parse(l.firstResponseAt) - Date.parse(l.createdAt)) / 6e4); return r.length ? Math.round(r.reduce((a, b) => a + b, 0) / r.length) : null; })(),
+      openValue: L.filter(l => !["won", "lost"].includes(l.stage)).reduce((a, l) => a + (l.dealValue || 0), 0),
+      wonValue: L.filter(l => l.stage === "won").reduce((a, l) => a + (l.dealValue || 0), 0),
       m30: inLast(0, 30), prev30: inLast(30, 60), today: L.filter(l => dayKey(new Date(l.createdAt)) === t).length,
-      won: L.filter(l => l.status === "won").length, lost: L.filter(l => l.status === "lost").length,
+      won: L.filter(l => l.stage === "won").length, lost: L.filter(l => l.stage === "lost").length,
       dueToday: due.filter(l => l.followUpOn === t).length, overdue: due.filter(l => l.followUpOn < t).length,
       optIn: L.filter(l => l.optIn).length,
     };
@@ -303,12 +308,12 @@
       '</div></div>' + (total ? '' : '<p class="help d-empty-note">New enquiries from your website and offer pages will appear here day by day.</p>') + '</div>';
   }
   function pipelineCard(s) {
-    const st = ["new", "contacted", "won", "lost"], lab = { new: "New", contacted: "Contacted", won: "Won", lost: "Lost" };
-    const by = k => S.leads.filter(l => l.status === k).length;
+    const st = STAGES.map(x => x[0]), lab = STAGE_LABEL;
+    const by = k => S.leads.filter(l => l.stage === k).length;
     const closed = s.won + s.lost;
     return '<div class="card"><div class="d-card-h"><h2>Pipeline</h2><button class="btn btn-g btn-sm" data-nav="leads">Open leads</button></div>' +
-      '<div class="pipe">' + st.map(k => { const v = by(k); return '<button class="pipe-row" data-lf="status" data-lv="' + k + '"><span class="st st-' + k + '">' + lab[k] + '</span><span class="pipe-bar"><i class="pb-' + k + '" style="width:' + pct(v, s.total) + '%"></i></span><b>' + v + '</b></button>'; }).join("") + '</div>' +
-      '<div class="d-foot"><span><b>' + (closed ? pct(s.won, closed) : 0) + '%</b> win rate on closed leads</span><span><b>' + s.optIn + '</b> opted in to WhatsApp</span></div></div>';
+      '<div class="pipe">' + st.map(k => { const v = by(k); return '<button class="pipe-row" data-lf="stage" data-lv="' + k + '"><span class="stg sg-' + k + '">' + lab[k] + '</span><span class="pipe-bar"><i class="pb-' + k + '" style="width:' + pct(v, s.total) + '%"></i></span><b>' + v + '</b></button>'; }).join("") + '</div>' +
+      '<div class="d-foot"><span><b>' + (closed ? pct(s.won, closed) : 0) + '%</b> win rate</span><span><b>' + rs(s.openValue) + '</b> open deals</span><span><b>' + (s.avgReply == null ? "–" : s.avgReply < 60 ? s.avgReply + " min" : Math.round(s.avgReply / 60) + " h") + '</b> avg first reply</span></div></div>';
   }
   function breakdown(title, key, empty, filterKey) {
     const m = {};
@@ -324,9 +329,9 @@
   function latestCard(limit) {
     const recent = S.leads.slice(0, limit);
     return '<div class="card d-latest"><div class="d-card-h"><h2>Latest enquiries</h2><button class="btn btn-g btn-sm" data-nav="leads">View all</button></div>' +
-      (recent.length ? '<div class="ll">' + recent.map(l => '<div class="ll-row"><span class="av">' + esc((l.name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase()) + '</span>' +
+      (recent.length ? '<div class="ll">' + recent.map(l => '<div class="ll-row" data-openrow="' + l.id + '"><span class="av">' + esc((l.name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase()) + '</span>' +
         '<span class="ll-main"><b>' + esc(l.name) + '</b><small>' + esc([l.businessType || l.business, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</small></span>' +
-        '<span class="ll-svc">' + esc(l.service || "–") + '</span><span class="st st-' + l.status + '">' + l.status + '</span><span class="ll-when">' + ago(l.createdAt) + '</span>' +
+        '<span class="ll-svc">' + esc(l.service || "–") + '</span><span class="stg sg-' + l.stage + '">' + STAGE_LABEL[l.stage] + '</span><span class="ll-when">' + ago(l.createdAt) + '</span>' +
         (l.phone ? '<a class="ib wa-ib" href="https://wa.me/' + waNum(l.phone) + '" target="_blank" rel="noopener" aria-label="WhatsApp ' + esc(l.name) + '">' + IC.wa + '</a>' : '<span></span>') + '</div>').join("") + '</div>'
         : '<div class="d-empty">' + ico("inbox") + '<p>No enquiries yet. Share your website or a festival offer link on WhatsApp to get the first ones.</p></div>') + '</div>';
   }
@@ -370,21 +375,28 @@
       '<div class="d-actions"><button class="btn btn-p" data-act="message">' + IC.send + 'Message leads</button>' + (staff ? '<button class="btn btn-ghost-l" data-nav="leads">' + IC.inbox + 'Open leads</button>' : '<button class="btn btn-ghost-l" data-act="newoffer">' + IC.gift + 'New festival offer</button><button class="btn btn-ghost-l" data-nav="slides">' + IC.edit + 'Edit website</button>') + '</div></div>';
   }
   function kpiRow(s) {
-    const k = (icon, tone, label, val, foot, nav, lf) => '<button class="card d-kpi tone-' + tone + '" data-' + (lf ? 'lf="status" data-lv="' + lf + '"' : 'nav="' + nav + '"') + '>' + ico(icon) + '<span class="d-kl">' + label + '</span><b>' + val + '</b>' + foot + '</button>';
+    const k = (icon, tone, label, val, foot, nav, lf) => '<button class="card d-kpi tone-' + tone + '" data-' + (lf ? 'lf="stage" data-lv="' + lf + '"' : 'nav="' + nav + '"') + '>' + ico(icon) + '<span class="d-kl">' + label + '</span><b>' + val + '</b>' + foot + '</button>';
     return '<div class="d-kpis">' +
-      k("inbox", "a", "New enquiries", s.fresh, '<span class="d-delta flat">' + (s.today ? s.today + " arrived today" : "Waiting for a first reply") + '</span>', "", "new") +
+      k("inbox", "a", "Waiting for first reply", s.waiting.length, '<span class="d-delta ' + (s.late ? "down" : "flat") + '">' + (s.late ? s.late + " past the " + slaMin() + "-min target" : s.avgReply != null ? "Avg first reply " + (s.avgReply < 60 ? s.avgReply + " min" : Math.round(s.avgReply / 60) + " h") : s.today ? s.today + " arrived today" : "All caught up") + '</span>', "", "new") +
       k("chart", "b", "Leads, last 30 days", s.m30, delta(s.m30, s.prev30), "leads") +
-      k("trophy", "c", "Won", s.won, '<span class="d-delta flat">' + (s.won + s.lost ? pct(s.won, s.won + s.lost) + "% win rate" : "Mark leads won or lost to track this") + '</span>', "", "won") +
+      k("trophy", "c", "Won", s.won, '<span class="d-delta flat">' + (s.won + s.lost ? pct(s.won, s.won + s.lost) + "% win rate" + (s.wonValue ? " · " + rs(s.wonValue) : "") : "Mark leads won or lost to track this") + '</span>', "", "won") +
       k("bell", "d", "Follow-ups due", s.dueToday + s.overdue, '<span class="d-delta ' + (s.overdue ? "down" : "flat") + '">' + (s.overdue ? s.overdue + " overdue" : s.dueToday ? s.dueToday + " today" : "Nothing pending") + '</span>', "leads") + '</div>';
+  }
+  function replyNowCard(s) {
+    const list = s.waiting.slice().sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)).slice(0, 6);
+    if (!list.length) return "";
+    return '<div class="card reply-now"><div class="d-card-h"><h2>Reply now</h2><span class="tagp ' + (s.late ? "bad" : "warn") + '">' + s.waiting.length + '</span></div><p class="help" style="font-size:13px;margin:-6px 0 10px">Leads answered within minutes are far more likely to convert.</p><div class="check">' +
+      list.map(l => { const w = waitInfo(l); return '<div><span class="lc-wait' + (w.late ? " late" : "") + '">⏱ ' + w.txt + '</span><span style="flex:1;min-width:0"><b>' + esc(l.name) + '</b> · ' + esc(l.service) + '</span>' + (l.phone ? '<button class="btn btn-p btn-sm" data-quickwa="' + l.id + '">WhatsApp</button>' : '<button class="btn btn-g btn-sm" data-openlead="' + l.id + '">Open</button>') + '</div>'; }).join("") + '</div></div>';
   }
   function renderDashboard(c) {
     const staff = isStaff(), s = leadStats();
     c.classList.add("dash");
     c.innerHTML = heroBand(s, staff) + kpiRow(s) +
       '<div class="d-grid g-21">' + trendChart() + pipelineCard(s) + '</div>' +
-      '<div class="d-grid g-21">' + latestCard(staff ? 8 : 6) + '<div class="d-stack">' + followUpCard() + ((S.orders || []).length || (S.content.products || []).length ? salesCard() : '') + (staff ? '' : offersCard()) + '</div></div>' +
-      '<div class="d-grid g-3">' + breakdown("What they want", "service", "Services leads ask about will show here.", "service") + breakdown("Business categories", "businessType", "Leads pick a category on the enquiry form.", "type") + breakdown("Top cities", "city", "Cities from the enquiry form will show here.", "q") + '</div>' +
+      '<div class="d-grid g-21">' + latestCard(staff ? 8 : 6) + '<div class="d-stack">' + replyNowCard(s) + followUpCard() + ((S.orders || []).length || (S.content.products || []).length ? salesCard() : '') + (staff ? '' : offersCard()) + '</div></div>' +
+      '<div class="d-grid ' + (s.lost ? "g-4" : "g-3") + '">' + breakdown("What they want", "service", "Services leads ask about will show here.", "service") + breakdown("Business categories", "businessType", "Leads pick a category on the enquiry form.", "type") + breakdown("Top cities", "city", "Cities from the enquiry form will show here.", "q") + (s.lost ? breakdown("Why leads were lost", "lostReason", "", "") : "") + '</div>' +
       (staff ? '' : '<div class="d-grid g-3">' + autoCard() + breakdown("Where leads come from", "source", "Sources will show here.", "") + healthCard() + '</div>' + contentCard());
+    c.onclick = e => { const r = e.target.closest("[data-openrow]"); if (r && !e.target.closest("a,button")) openLead(r.dataset.openrow); };
     if (!staff && !S.autoCfg) api("GET", "automation").then(a => { S.autoCfg = a || {}; const el = document.getElementById("autoCard"); if (el && S.view === "dashboard") el.outerHTML = autoCard(); }).catch(() => { const el = document.getElementById("autoCard"); if (el) el.querySelector(".help").textContent = "Couldn't load automation settings."; });
   }
 
@@ -527,7 +539,28 @@
         : '<p class="help" style="margin-top:10px">No sales yet. Add products under Store → Products & plans and switch on payments.</p>') + '</div>';
   }
 
-  /* ---------- leads ---------- */
+  /* ---------- leads: pipeline board, list and detail panel ---------- */
+  const STAGES = [["new", "New"], ["contacted", "Contacted"], ["qualified", "Qualified"], ["proposal", "Proposal sent"], ["negotiation", "Negotiation"], ["won", "Won"], ["lost", "Lost"]];
+  const STAGE_LABEL = Object.fromEntries(STAGES);
+  const STAGE_HINT = { new: "Not replied yet", contacted: "First reply sent", qualified: "Need, budget and timing confirmed", proposal: "Quote or proposal shared", negotiation: "Discussing price or scope", won: "Paid or signed", lost: "Closed without a sale" };
+  const PRIO = { hot: "Hot", warm: "Warm", cold: "Cold" };
+  const LOST_REASONS = ["Price too high", "Not the right time", "No budget", "Went with another agency", "No response", "Not a fit for us", "Other"];
+  const ACT_LABEL = { created: "Enquiry received", stage: "Stage", owner: "Assigned to", priority: "Priority", value: "Deal value", note: "Note", call: "Call", whatsapp: "WhatsApp", email: "Email", meeting: "Meeting", task: "Task", followup: "Follow-up set" };
+  const rs = n => "₹" + Number(n || 0).toLocaleString("en-IN");
+  const ownerOf = id => (S.team || []).find(m => m.id === id);
+  const initials = s => String(s || "?").trim().split(/[\s@._]+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+  const slaMin = () => +((S.crm && S.crm.reply_sla_minutes) || 30);
+  function waitInfo(l) {
+    if (l.firstResponseAt || l.stage !== "new") return null;
+    const m = Math.floor((Date.now() - Date.parse(l.createdAt)) / 6e4);
+    const txt = m < 60 ? m + " min" : m < 1440 ? Math.floor(m / 60) + "h " + (m % 60) + "m" : Math.floor(m / 1440) + "d";
+    return { m, txt, late: m > slaMin() };
+  }
+  function replyTime(l) {
+    if (!l.firstResponseAt) return "";
+    const m = Math.max(0, Math.round((Date.parse(l.firstResponseAt) - Date.parse(l.createdAt)) / 6e4));
+    return m < 60 ? m + " min" : m < 1440 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " days";
+  }
   // Distinct values seen on leads, plus the categories offered on the website, so filters list every option.
   function leadValues(k) {
     const st = (S.content && S.content.settings) || {}, base = [];
@@ -536,27 +569,178 @@
     S.leads.forEach(l => { if (l[k]) base.push(l[k]); });
     return [...new Set(base)];
   }
+  function filteredLeads(ignoreStage) {
+    const f = S.leadFilter, q = (f.q || "").toLowerCase(), me = S.user && S.user.id;
+    return S.leads.filter(l => (ignoreStage || !f.stage || l.stage === f.stage) && (!f.status || l.status === f.status) && (!f.type || l.businessType === f.type) && (!f.service || l.service === f.service) &&
+      (!f.priority || l.priority === f.priority) && (!f.owner || (f.owner === "me" ? l.ownerId === me : f.owner === "none" ? !l.ownerId : l.ownerId === f.owner)) &&
+      (!q || [l.name, l.phone, l.email, l.business, l.businessType, l.city, l.service, l.message, l.notes].join(" ").toLowerCase().includes(q)));
+  }
+  const leadView = () => { try { return localStorage.getItem("vb_lead_view") || "board"; } catch (_) { return "board"; } };
+  function leadCard(l) {
+    const w = waitInfo(l), o = ownerOf(l.ownerId);
+    return '<article class="lcard pr-' + l.priority + '" draggable="true" data-lead="' + l.id + '" tabindex="0" aria-label="' + esc(l.name) + ', ' + esc(STAGE_LABEL[l.stage]) + '">' +
+      '<div class="lc-top"><b>' + esc(l.name) + '</b><span class="prio p-' + l.priority + '">' + PRIO[l.priority] + '</span></div>' +
+      '<div class="lc-sub">' + esc([l.business || l.businessType, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</div>' +
+      '<div class="lc-svc">' + esc(l.service || "–") + '</div>' +
+      '<div class="lc-foot">' + (l.dealValue ? '<span class="lc-val">' + rs(l.dealValue) + '</span>' : '') +
+        (w ? '<span class="lc-wait' + (w.late ? " late" : "") + '" title="Waiting for first reply">⏱ ' + w.txt + '</span>' : l.followUpOn ? '<span class="lc-fu' + (l.followUpOn <= todayStr() ? " due" : "") + '">↻ ' + new Date(l.followUpOn + "T00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</span>' : '') +
+        (l.tags.includes("repeat") ? '<span class="lc-tag">repeat</span>' : '') + '<span style="flex:1"></span>' +
+        (o ? '<span class="lc-own" title="' + esc(o.name) + '">' + esc(initials(o.name)) + '</span>' : '<span class="lc-own none" title="Unassigned">–</span>') + '</div></article>';
+  }
   function renderLeads(c) {
-    const f = S.leadFilter, q = f.q.toLowerCase();
-    const rows = S.leads.filter(l => (!f.status || l.status === f.status) && (!f.type || l.businessType === f.type) && (!f.service || l.service === f.service) && (!q || [l.name, l.phone, l.email, l.business, l.businessType, l.city, l.service, l.message].join(" ").toLowerCase().includes(q)));
-    c.innerHTML = '<div class="filters"><input type="search" id="lq" placeholder="Search name, phone, city…" value="' + esc(f.q) + '" aria-label="Search leads"><select id="ls" aria-label="Filter by status"><option value="">All statuses</option>' + ["new", "contacted", "won", "lost"].map(s => '<option' + (f.status === s ? " selected" : "") + '>' + s + '</option>').join("") + '</select>' +
-      '<select id="ltype" aria-label="Filter by business category"><option value="">All business categories</option>' + leadValues("businessType").map(v => '<option' + (f.type === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
-      '<select id="lsvc" aria-label="Filter by service"><option value="">All services</option>' + leadValues("service").map(v => '<option' + (f.service === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select><span class="help">' + rows.length + ' of ' + S.leads.length + '</span><span style="flex:1"></span><button class="btn btn-p btn-sm" data-act="message">Message leads</button><button class="btn btn-s btn-sm" data-act="csv">Export CSV</button></div>' +
-      (rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Received</th><th>Contact</th><th>Interested in</th><th>Message</th><th>Status</th><th>Follow-up</th><th>Notes</th><th></th></tr></thead><tbody>' + rows.map(l => {
-        const wa = l.phone ? "https://wa.me/" + waNum(l.phone) : "";
-        return '<tr><td><span style="font-variant-numeric:tabular-nums">' + new Date(l.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</span><div class="sub">' + new Date(l.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) + '</div></td>' +
-          '<td><b>' + esc(l.name) + '</b>' + (l.business ? '<div class="sub">' + esc(l.business) + '</div>' : '') + (l.businessType || l.city ? '<div class="sub">' + esc([l.businessType, l.city].filter(Boolean).join(" · ")) + '</div>' : '') + (l.phone ? '<div class="sub"><a href="tel:' + esc(l.phone) + '">' + esc(l.phone) + '</a> · <a href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></div>' : '') + (l.email ? '<div class="sub"><a href="mailto:' + esc(l.email) + '">' + esc(l.email) + '</a></div>' : '') + (l.optIn ? '<div><span class="tagp live" style="margin:4px 0 0">WhatsApp opt-in</span></div>' : '') + (l.lastMessageAt ? '<div class="sub">Messaged ' + new Date(l.lastMessageAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
-          '<td>' + esc(l.service) + '<div class="sub">' + esc(leadSource(l)) + '</div></td><td><div class="msg">' + esc(l.message) + '</div></td>' +
-          '<td><select class="st st-' + l.status + '" data-lstatus="' + l.id + '" aria-label="Status">' + ["new", "contacted", "won", "lost"].map(s => '<option' + (s === l.status ? " selected" : "") + '>' + s + '</option>').join("") + '</select></td>' +
-          '<td><input type="date" class="lead-date" data-lfollow="' + l.id + '" value="' + esc(l.followUpOn) + '" aria-label="Follow-up date"></td>' +
-          '<td><textarea class="lead-notes" data-lnotes="' + l.id + '" aria-label="Notes">' + esc(l.notes) + '</textarea></td>' +
-          '<td>' + (isStaff() ? '' : S.pendingDel === l.id ? '<span class="confirm"><button class="btn btn-d btn-sm" data-ldelyes="' + l.id + '">Delete</button><button class="btn btn-g btn-sm" data-delno>Keep</button></span>' : '<button class="ib" data-ldel="' + l.id + '" aria-label="Delete lead">🗑</button>') + '</td></tr>';
-      }).join("") + '</tbody></table></div>' : '<div class="empty">' + (S.leads.length ? "No leads match this filter." : "No enquiries yet. Leads from the website contact form appear here.") + '</div>');
+    const f = S.leadFilter, view = leadView();
+    const rows = filteredLeads(view === "board");
+    const team = S.team || [];
+    c.innerHTML = '<div class="filters lead-filters"><div class="seg" role="group" aria-label="View"><button data-lview="board" class="' + (view === "board" ? "on" : "") + '">Board</button><button data-lview="list" class="' + (view === "list" ? "on" : "") + '">List</button></div>' +
+      '<input type="search" id="lq" placeholder="Search name, phone, city…" value="' + esc(f.q) + '" aria-label="Search leads">' +
+      (view === "list" ? '<select id="ls" aria-label="Filter by stage"><option value="">All stages</option>' + STAGES.map(([k, v]) => '<option value="' + k + '"' + (f.stage === k ? " selected" : "") + '>' + v + '</option>').join("") + '</select>' : '') +
+      '<select id="lprio" aria-label="Filter by priority"><option value="">Any priority</option>' + Object.entries(PRIO).map(([k, v]) => '<option value="' + k + '"' + (f.priority === k ? " selected" : "") + '>' + v + '</option>').join("") + '</select>' +
+      '<select id="lowner" aria-label="Filter by owner"><option value="">Everyone\'s leads</option><option value="me"' + (f.owner === "me" ? " selected" : "") + '>My leads</option><option value="none"' + (f.owner === "none" ? " selected" : "") + '>Unassigned</option>' + team.map(m => '<option value="' + m.id + '"' + (f.owner === m.id ? " selected" : "") + '>' + esc(m.name) + '</option>').join("") + '</select>' +
+      '<select id="ltype" aria-label="Filter by business category"><option value="">All categories</option>' + leadValues("businessType").map(v => '<option' + (f.type === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
+      '<select id="lsvc" aria-label="Filter by service"><option value="">All services</option>' + leadValues("service").map(v => '<option' + (f.service === v ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
+      '<span class="help">' + rows.length + ' of ' + S.leads.length + '</span><span style="flex:1"></span>' + (isStaff() ? '' : '<button class="btn btn-g btn-sm" data-act="leadsettings">Lead settings</button>') + '<button class="btn btn-p btn-sm" data-act="message">Message leads</button><button class="btn btn-s btn-sm" data-act="csv">Export CSV</button></div>' +
+      (!S.leads.length ? '<div class="empty">No enquiries yet. Leads from the website, offer pages and purchases appear here.</div>' : view === "board" ? boardHtml(rows) : listHtml(rows));
+    c.onclick = e => { const card = e.target.closest("[data-lead],[data-open]"); if (card && !e.target.closest("select,input,textarea,a,button:not([data-open])")) openLead(card.dataset.lead || card.dataset.open); };
+    c.onkeydown = e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.lead) openLead(e.target.dataset.lead); };
+    if (view === "board") bindBoard(c);
+  }
+  function boardHtml(rows) {
+    const open = STAGES.filter(([k]) => k !== "won" && k !== "lost");
+    const sortIn = (k, list) => list.sort((a, b) => k === "new" ? Date.parse(a.createdAt) - Date.parse(b.createdAt) : ({ hot: 0, warm: 1, cold: 2 })[a.priority] - ({ hot: 0, warm: 1, cold: 2 })[b.priority] || Date.parse(b.stageChangedAt) - Date.parse(a.stageChangedAt));
+    const closed = k => { const list = rows.filter(l => l.stage === k), v = list.reduce((a, l) => a + (l.dealValue || 0), 0); return '<button class="bzone bz-' + k + '" data-drop="' + k + '" data-zone="' + k + '"><b>' + (k === "won" ? "✓ Won" : "✕ Lost") + '</b><span>' + list.length + ' lead' + (list.length === 1 ? '' : 's') + (v ? ' · ' + rs(v) : '') + '</span><small>Drop here to mark ' + k + ' · click to see them</small></button>'; };
+    return '<div class="board">' + open.map(([k, label]) => {
+      const list = sortIn(k, rows.filter(l => l.stage === k)), value = list.reduce((a, l) => a + (l.dealValue || 0), 0);
+      return '<section class="bcol bc-' + k + '" data-drop="' + k + '" aria-label="' + label + '"><header><span class="bdot"></span><b>' + label + '</b><span class="bcount">' + list.length + '</span>' + (value ? '<small>' + rs(value) + '</small>' : '') + '</header><p class="bhint">' + STAGE_HINT[k] + '</p>' +
+        '<div class="bbody">' + list.slice(0, 60).map(leadCard).join("") + (list.length > 60 ? '<p class="bmore">+' + (list.length - 60) + ' more · use List view</p>' : '') + (list.length ? '' : '<p class="bempty">Drop a lead here</p>') + '</div></section>';
+    }).join("") + '</div><div class="bzones">' + closed("won") + closed("lost") + '</div>';
+  }
+  function listHtml(rows) {
+    return rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Received</th><th>Contact</th><th>Interested in</th><th>Stage</th><th>Priority</th><th>Owner</th><th>Follow-up</th><th></th></tr></thead><tbody>' + rows.map(l => {
+      const wa = l.phone ? "https://wa.me/" + waNum(l.phone) : "", w = waitInfo(l);
+      return '<tr><td><span style="font-variant-numeric:tabular-nums">' + new Date(l.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</span><div class="sub">' + new Date(l.createdAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) + '</div>' + (w ? '<div class="lc-wait' + (w.late ? " late" : "") + '">⏱ ' + w.txt + '</div>' : '') + '</td>' +
+        '<td><button class="linkish" data-open="' + l.id + '">' + esc(l.name) + '</button>' + (l.business ? '<div class="sub">' + esc(l.business) + '</div>' : '') + (l.businessType || l.city ? '<div class="sub">' + esc([l.businessType, l.city].filter(Boolean).join(" · ")) + '</div>' : '') + (l.phone ? '<div class="sub"><a href="tel:' + esc(l.phone) + '">' + esc(l.phone) + '</a> · <a href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp</a></div>' : '') + (l.email ? '<div class="sub"><a href="mailto:' + esc(l.email) + '">' + esc(l.email) + '</a></div>' : '') + (l.optIn ? '<div><span class="tagp live" style="margin:4px 0 0">WhatsApp opt-in</span></div>' : '') + (l.tags.includes("repeat") ? '<div><span class="tagp warn" style="margin:4px 0 0">Repeat enquiry</span></div>' : '') + '</td>' +
+        '<td>' + esc(l.service) + '<div class="sub">' + esc(leadSource(l)) + '</div>' + (l.dealValue ? '<div class="sub"><b>' + rs(l.dealValue) + '</b></div>' : '') + '</td>' +
+        '<td><select class="st st-' + l.status + '" data-lstage="' + l.id + '" aria-label="Stage">' + STAGES.map(([k, v]) => '<option value="' + k + '"' + (k === l.stage ? " selected" : "") + '>' + v + '</option>').join("") + '</select>' + (l.stage === "lost" && l.lostReason ? '<div class="sub">' + esc(l.lostReason) + '</div>' : '') + '</td>' +
+        '<td><span class="prio p-' + l.priority + '" title="Score ' + l.score + '/100">' + PRIO[l.priority] + '</span></td>' +
+        '<td>' + esc((ownerOf(l.ownerId) || {}).name || "–") + '</td>' +
+        '<td><input type="date" class="lead-date" data-lfollow="' + l.id + '" value="' + esc(l.followUpOn) + '" aria-label="Follow-up date"></td>' +
+        '<td>' + (isStaff() ? '' : S.pendingDel === l.id ? '<span class="confirm"><button class="btn btn-d btn-sm" data-ldelyes="' + l.id + '">Delete</button><button class="btn btn-g btn-sm" data-delno>Keep</button></span>' : '<button class="ib" data-ldel="' + l.id + '" aria-label="Delete lead">🗑</button>') + '</td></tr>';
+    }).join("") + '</tbody></table></div>' : '<div class="empty">No leads match this filter.</div>';
+  }
+  function bindBoard(c) {
+    let dragId = null;
+    c.querySelectorAll(".lcard").forEach(el => el.addEventListener("dragstart", e => { dragId = el.dataset.lead; e.dataTransfer.setData("text/plain", dragId); el.classList.add("dragging"); document.body.classList.add("dragging-lead"); }));
+    c.querySelectorAll(".lcard").forEach(el => el.addEventListener("dragend", () => { el.classList.remove("dragging"); document.body.classList.remove("dragging-lead"); }));
+    c.querySelectorAll("[data-drop]").forEach(col => {
+      col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("over"); });
+      col.addEventListener("dragleave", () => col.classList.remove("over"));
+      col.addEventListener("drop", e => { e.preventDefault(); col.classList.remove("over"); const id = e.dataTransfer.getData("text/plain") || dragId; if (id) moveLead(id, col.dataset.drop); });
+    });
+  }
+  async function moveLead(id, stage) {
+    const l = S.leads.find(x => x.id === id);
+    if (!l || l.stage === stage) return;
+    let lostReason;
+    if (stage === "lost") { lostReason = await pickLostReason(l); if (lostReason == null) return; }
+    await patchLead(id, Object.assign({ stage }, lostReason != null ? { lostReason } : {}), "Moved to " + STAGE_LABEL[stage] + ".");
+  }
+  async function patchLead(id, body, msg) {
+    try {
+      const l = await api("PATCH", "leads/" + id, body);
+      Object.assign(S.leads.find(x => x.id === id), l);
+      if (msg) toast(msg);
+      if (S.view === "leads") renderView();
+      if (document.getElementById("leadDrawer")) openLead(id, true);
+      return l;
+    } catch (err) { toast(err.message, true); }
+  }
+  function pickLostReason(l) {
+    return new Promise(res => {
+      const m = document.createElement("div"); m.className = "modal";
+      m.innerHTML = '<div class="box" style="max-width:420px"><header><h2>Why was ' + esc(l.name) + ' lost?</h2></header><p class="help">This helps you see where deals slip away.</p><div class="lr-list">' + LOST_REASONS.map(r => '<button class="btn btn-s" data-r="' + esc(r) + '">' + esc(r) + '</button>').join("") + '</div><div style="margin-top:12px;text-align:right"><button class="btn btn-g btn-sm" data-r="__cancel">Cancel</button></div></div>';
+      document.body.appendChild(m);
+      m.addEventListener("click", e => { const b = e.target.closest("[data-r]"); if (!b && e.target !== m) return; m.remove(); res(!b || b.dataset.r === "__cancel" ? null : b.dataset.r); });
+    });
+  }
+  /* detail panel */
+  async function openLead(id, keepScroll) {
+    const l = S.leads.find(x => x.id === id); if (!l) return;
+    let d = document.getElementById("leadDrawer");
+    const top = d && keepScroll ? d.querySelector(".dr-body").scrollTop : 0;
+    if (!d) { d = document.createElement("aside"); d.id = "leadDrawer"; d.className = "drawer"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "false"); document.body.appendChild(d); document.body.classList.add("drawer-open"); }
+    const o = ownerOf(l.ownerId), w = waitInfo(l), wa = l.phone ? "https://wa.me/" + waNum(l.phone) : "";
+    const field = (label, html) => '<div class="fld"><label>' + label + '</label>' + html + '</div>';
+    d.innerHTML = '<header class="dr-head"><div><span class="prio p-' + l.priority + '">' + PRIO[l.priority] + ' · ' + l.score + '</span><h2>' + esc(l.name) + '</h2><p>' + esc([l.business, l.businessType, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</p></div><button class="ib" data-dr="close" aria-label="Close">✕</button></header>' +
+      '<div class="dr-body">' +
+        (w ? '<div class="dr-alert' + (w.late ? " late" : "") + '">⏱ Waiting ' + w.txt + ' for a first reply' + (w.late ? ' · past your ' + slaMin() + '-minute target' : '') + '</div>' : l.firstResponseAt ? '<div class="dr-ok">✓ First reply in ' + replyTime(l) + '</div>' : '') +
+        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + '</div>' +
+        '<div class="dr-grid">' +
+          field("Stage", '<select data-df="stage">' + STAGES.map(([k, v]) => '<option value="' + k + '"' + (k === l.stage ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
+          field("Priority", '<select data-df="priority">' + Object.entries(PRIO).map(([k, v]) => '<option value="' + k + '"' + (k === l.priority ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
+          field("Owner", '<select data-df="ownerId"><option value="">Unassigned</option>' + (S.team || []).map(m => '<option value="' + m.id + '"' + (m.id === l.ownerId ? " selected" : "") + '>' + esc(m.name) + (m.id === S.user.id ? " (me)" : "") + '</option>').join("") + '</select>') +
+          field("Deal value (₹)", '<input type="number" min="0" step="500" data-df="dealValue" value="' + (l.dealValue || "") + '" placeholder="0">') +
+          field("Follow-up on", '<input type="date" data-df="followUpOn" value="' + esc(l.followUpOn) + '">') +
+          field("Next step", '<input type="text" data-df="nextAction" maxlength="200" value="' + esc(l.nextAction) + '" placeholder="e.g. Send website quote">') +
+          (l.stage === "lost" ? field("Lost because", '<select data-df="lostReason"><option value="">Choose…</option>' + LOST_REASONS.map(r => '<option' + (r === l.lostReason ? " selected" : "") + '>' + esc(r) + '</option>').join("") + '</select>') : '') +
+        '</div>' +
+        '<dl class="dr-info">' + [["Phone", l.phone], ["Email", l.email], ["Interested in", l.service], ["Came from", leadSource(l)], ["Message", l.message], ["Received", new Date(l.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })], ["WhatsApp opt-in", l.optIn ? "Yes" : "No"], ["Tags", (l.tags || []).join(", ")]].filter(x => x[1]).map(([k, v]) => '<dt>' + k + '</dt><dd>' + esc(v) + '</dd>').join("") + '</dl>' +
+        '<div class="fld"><label>Notes</label><textarea data-df="notes" rows="3" placeholder="Anything the team should know">' + esc(l.notes) + '</textarea></div>' +
+        '<div class="dr-log"><select id="actKind" aria-label="Activity type"><option value="call">Call</option><option value="meeting">Meeting</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="task">Task done</option><option value="note">Note</option></select><input id="actText" type="text" maxlength="500" placeholder="What happened? e.g. Discussed budget, sending quote"><button class="btn btn-s btn-sm" data-dr="log">Add</button></div>' +
+        '<h3 class="dr-h3">Timeline</h3><ol class="timeline" id="tl"><li class="help">Loading…</li></ol>' +
+      '</div>';
+    d.querySelector(".dr-body").scrollTop = top;
+    d.onclick = async e => {
+      const b = e.target.closest("[data-dr],[data-log]"); if (!b) return;
+      if (b.dataset.dr === "close") return closeLead();
+      if (b.dataset.log) { logActivity(l.id, b.dataset.log, b.dataset.log === "whatsapp" ? "Opened WhatsApp chat" : b.dataset.log === "call" ? "Called" : "Emailed", true); return; }
+      if (b.dataset.dr === "log") { const t = document.getElementById("actText"); await logActivity(l.id, document.getElementById("actKind").value, t.value.trim() || "", false); t.value = ""; }
+    };
+    d.onchange = e => {
+      const k = e.target.dataset.df; if (!k) return;
+      if (k === "stage" && e.target.value === "lost") { moveLead(l.id, "lost").then(() => openLead(l.id, true)); return; }
+      patchLead(l.id, { [k]: e.target.value }, "Saved.");
+    };
+    d.onkeydown = e => { if (e.key === "Enter" && e.target.id === "actText") d.querySelector('[data-dr="log"]').click(); };
+    try {
+      const acts = await api("GET", "lead-activity/" + l.id);
+      const tl = document.getElementById("tl"); if (!tl) return;
+      tl.innerHTML = acts.length ? acts.map(a => { const who = ownerOf(a.actor); return '<li class="tk-' + a.kind + '"><span class="tl-dot"></span><div><b>' + esc(ACT_LABEL[a.kind] || a.kind) + '</b>' + (a.detail ? ' · ' + esc(a.detail) : '') + '<small>' + new Date(a.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) + (who ? ' · ' + esc(who.name) : '') + '</small></div></li>'; }).join("") : '<li class="help">No activity yet.</li>';
+    } catch (_) { const tl = document.getElementById("tl"); if (tl) tl.innerHTML = '<li class="help">Timeline unavailable.</li>'; }
+  }
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && document.getElementById("leadDrawer") && !document.querySelector(".modal")) closeLead(); });
+  function closeLead() { const d = document.getElementById("leadDrawer"); if (d) d.remove(); document.body.classList.remove("drawer-open"); }
+  async function logActivity(id, kind, detail, quiet) {
+    try {
+      await api("POST", "lead-activity", { leadId: id, kind, detail });
+      const fresh = (await api("GET", "leads").catch(() => null)); if (fresh) S.leads = fresh;
+      if (!quiet) toast("Added to the timeline.");
+      if (S.view === "leads") renderView();
+      openLead(id, true);
+    } catch (err) { toast(err.message, true); }
+  }
+  async function leadSettings() {
+    let cfg = {};
+    try { cfg = await api("GET", "crm-settings"); } catch (err) { return toast(err.message, true); }
+    const m = document.createElement("div"); m.className = "modal";
+    m.innerHTML = '<div class="box" style="max-width:480px"><header><h2>Lead settings</h2><button class="btn btn-g btn-sm" data-x>Close</button></header>' +
+      '<label class="chk" for="csAuto"><input type="checkbox" id="csAuto"' + (cfg.auto_assign ? " checked" : "") + '><span>Share new leads automatically<span class="hint">Each new enquiry goes to the next person in turn, so nobody waits for someone to pick it up</span></span></label>' +
+      '<div class="fld" style="margin-top:10px"><label for="csTo">Share between</label><select id="csTo"><option value="staff"' + (cfg.assign_to !== "everyone" ? " selected" : "") + '>Staff only</option><option value="everyone"' + (cfg.assign_to === "everyone" ? " selected" : "") + '>Staff and admins</option></select></div>' +
+      '<div class="fld"><label for="csSla">Reply within (minutes)</label><input type="number" id="csSla" min="5" max="1440" value="' + (cfg.reply_sla_minutes || 30) + '"><span class="hint">Leads waiting longer than this turn red on the board and dashboard</span></div>' +
+      '<div style="text-align:right;margin-top:12px"><button class="btn btn-p" data-save>Save</button></div></div>';
+    document.body.appendChild(m);
+    m.addEventListener("click", async e => {
+      if (e.target === m || e.target.closest("[data-x]")) return m.remove();
+      if (e.target.closest("[data-save]")) {
+        try { S.crm = await api("PUT", "crm-settings", { auto_assign: m.querySelector("#csAuto").checked, assign_to: m.querySelector("#csTo").value, reply_sla_minutes: m.querySelector("#csSla").value }); toast("Lead settings saved."); m.remove(); renderView(); }
+        catch (err) { toast(err.message, true); }
+      }
+    });
   }
   function exportCsv() {
-    const cols = ["createdAt", "name", "phone", "email", "business", "businessType", "city", "service", "message", "status", "notes", "source", "optIn", "followUpOn", "lastMessageAt"];
+    const cols = ["createdAt", "name", "phone", "email", "business", "businessType", "city", "service", "message", "stage", "priority", "score", "owner", "dealValue", "lostReason", "nextAction", "firstReplyMinutes", "notes", "source", "optIn", "followUpOn", "lastMessageAt", "tags"];
     const cell = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-    const csv = [cols.join(",")].concat(S.leads.map(l => cols.map(k => cell(l[k])).join(","))).join("\r\n");
+    const val = (l, k) => k === "owner" ? (ownerOf(l.ownerId) || {}).name : k === "firstReplyMinutes" ? (l.firstResponseAt ? Math.round((Date.parse(l.firstResponseAt) - Date.parse(l.createdAt)) / 6e4) : "") : k === "tags" ? (l.tags || []).join(" ") : l[k];
+    const csv = [cols.join(",")].concat(S.leads.map(l => cols.map(k => cell(val(l, k))).join(","))).join("\r\n");
     download(new Blob(["﻿" + csv], { type: "text/csv" }), "leads-" + new Date().toISOString().slice(0, 10) + ".csv");
   }
   function download(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
@@ -817,7 +1001,18 @@
     if (d.act === "testmail") { const to = (document.getElementById("testTo") || {}).value || ""; b.disabled = true; try { await api("POST", "test-mail", { to }); toast("Test email sent to " + to + ". Check the inbox (and spam)."); } catch (err) { toast(err.message, true); } b.disabled = false; return; }
     if (d.copy) { try { await navigator.clipboard.writeText(d.copy); toast("Copied."); } catch (_) { toast("Couldn't copy. Select the text and copy it.", true); } return; }
     if (d.range) { S.dashRange = +d.range; const ch = document.querySelector(".d-chart"); if (ch) ch.outerHTML = trendChart(); return; }
-    if (d.lf) { S.leadFilter = { q: "", status: "", type: "", service: "" }; S.leadFilter[d.lf] = d.lv; return navigate("leads"); }
+    if (d.lf) { S.leadFilter = { q: "", status: "", stage: "", type: "", service: "", priority: "", owner: "" }; S.leadFilter[d.lf] = d.lv; if (d.lf === "stage" || d.lf === "status") { try { localStorage.setItem("vb_lead_view", "list"); } catch (_) {} } return navigate("leads"); }
+    if (d.lview) { try { localStorage.setItem("vb_lead_view", d.lview); } catch (_) {} return renderView(); }
+    if (d.act === "leadsettings") return leadSettings();
+    if (d.zone) { S.leadFilter.stage = d.zone; try { localStorage.setItem("vb_lead_view", "list"); } catch (_) {} return renderView(); }
+    if (d.openlead) return openLead(d.openlead);
+    if (d.quickwa) {
+      const l = S.leads.find(x => x.id === d.quickwa); if (!l) return;
+      window.open("https://wa.me/" + waNum(l.phone) + "?text=" + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + "."), "_blank", "noopener");
+      await api("POST", "lead-activity", { leadId: l.id, kind: "whatsapp", detail: "Replied on WhatsApp from the dashboard" }).catch(err => toast(err.message, true));
+      S.leads = await api("GET", "leads").catch(() => S.leads); toast("Marked as replied."); return renderView();
+    }
+    if (d.open && S.view !== "leads") return;
     if (d.act === "newoffer") { await navigate("offers"); const add = document.querySelector('[data-act="add"]'); if (add) add.click(); return; }
     if (d.act === "backup") { try { const j = await api("GET", "backup"); return download(new Blob([JSON.stringify(j, null, 1)], { type: "application/json" }), "vivid-brandify-backup-" + new Date().toISOString().slice(0, 10) + ".json"); } catch (err) { return toast("Backup failed: " + err.message, true); } }
 
@@ -858,7 +1053,13 @@
   });
   app.addEventListener("change", async e => {
     const t = e.target;
-    if (t.id === "ls") { S.leadFilter.status = t.value; renderView(); return; }
+    if (t.id === "ls") { S.leadFilter.stage = t.value; renderView(); return; }
+    if (t.id === "lprio") { S.leadFilter.priority = t.value; renderView(); return; }
+    if (t.id === "lowner") { S.leadFilter.owner = t.value; renderView(); return; }
+    if (t.dataset.lstage) {
+      if (t.value === "lost") { const id = t.dataset.lstage; moveLead(id, "lost").then(() => renderView()); return; }
+      patchLead(t.dataset.lstage, { stage: t.value }, "Stage updated."); return;
+    }
     if (t.id === "ltype") { S.leadFilter.type = t.value; renderView(); return; }
     if (t.id === "lsvc") { S.leadFilter.service = t.value; renderView(); return; }
     if (t.id === "ost") { S.orderFilter.status = t.value; renderView(); return; }

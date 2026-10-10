@@ -498,3 +498,7 @@ body.co-open{overflow:hidden}
 .plan-gst{font-size:13px;color:var(--muted);margin-top:-6px}
 .co-tax span,.co-tax b{color:var(--muted);font-weight:500}
 .co-fields select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:11px;font:15px var(--body);background:var(--bg);color:var(--ink)}
+
+/* hold the page until the script has drawn it, so nothing jumps (falls back to visible after 2.5s) */
+.vb-boot #main{visibility:hidden;animation:vbShow 0s 2.5s forwards}
+@keyframes vbShow{to{visibility:visible}}

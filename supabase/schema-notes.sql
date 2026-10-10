@@ -45,3 +45,12 @@
 -- private.mail_log         every email the store function sends (admin RPC mail_log)
 -- public.store_internal()  service-role only helper used by the edge function
 -- trigger leads_email_automation -> edge function /store/lead-mail for enquiry emails
+
+-- Lead pipeline (work classification)
+-- leads.stage            new / contacted / qualified / proposal / negotiation / won / lost (status is kept in sync for older code)
+-- leads.priority, score  hot / warm / cold from an automatic 0-100 score on arrival (contact details, business info, message, service, source, repeat)
+-- leads.owner_id         team member responsible; optional round-robin auto-assign in private.crm_settings
+-- leads.deal_value, lost_reason, next_action, first_response_at, stage_changed_at, repeat_of, tags
+-- public.lead_activity   timeline (created, stage, owner, priority, value, note, call, whatsapp, email, meeting, task, followup)
+-- triggers: leads_classify (before insert), leads_sync (before update), leads_log_insert / leads_log_update, lead_activity_touch
+-- RPCs: team_directory(), get_crm_settings(), save_crm_settings(p)

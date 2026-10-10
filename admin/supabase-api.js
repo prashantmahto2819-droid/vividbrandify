@@ -97,7 +97,9 @@
   }
 
   /* ---------- leads ---------- */
-  const mapLead = l => ({ id: l.id, name: l.name, phone: l.phone, email: l.email, business: l.business, businessType: l.business_type || "", city: l.city || "", service: l.service, message: l.message, source: l.source, status: l.status, notes: l.notes, createdAt: l.created_at, optIn: !!l.opt_in, lastMessageAt: l.last_message_at || "", followUpOn: l.follow_up_on || "" });
+  const mapLead = l => ({ id: l.id, name: l.name, phone: l.phone, email: l.email, business: l.business, businessType: l.business_type || "", city: l.city || "", service: l.service, message: l.message, source: l.source, status: l.status, notes: l.notes, createdAt: l.created_at, optIn: !!l.opt_in, lastMessageAt: l.last_message_at || "", followUpOn: l.follow_up_on || "",
+    stage: l.stage || l.status, priority: l.priority || "warm", score: l.score || 0, ownerId: l.owner_id || "", dealValue: l.deal_value || 0, lostReason: l.lost_reason || "", nextAction: l.next_action || "",
+    firstResponseAt: l.first_response_at || "", stageChangedAt: l.stage_changed_at || l.created_at, repeatOf: l.repeat_of || "", tags: l.tags || [] });
 
   /* ---------- media ---------- */
   const EXT = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif", "image/x-icon": ".ico", "image/vnd.microsoft.icon": ".ico" };
@@ -186,11 +188,26 @@
         if (typeof body.notes === "string") patch.notes = body.notes.slice(0, 5000);
         if (body.followUpOn !== undefined) patch.follow_up_on = /^\d{4}-\d{2}-\d{2}$/.test(body.followUpOn || "") ? body.followUpOn : null;
         if (body.messaged === true) patch.last_message_at = new Date().toISOString();
+        if (["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"].includes(body.stage)) patch.stage = body.stage;
+        if (["hot", "warm", "cold"].includes(body.priority)) patch.priority = body.priority;
+        if (body.ownerId !== undefined) patch.owner_id = /^[0-9a-f-]{36}$/.test(body.ownerId || "") ? body.ownerId : null;
+        if (body.dealValue !== undefined) patch.deal_value = Math.max(0, Math.min(100000000, Math.round(Number(body.dealValue) || 0)));
+        if (typeof body.lostReason === "string") patch.lost_reason = body.lostReason.slice(0, 120);
+        if (typeof body.nextAction === "string") patch.next_action = body.nextAction.slice(0, 200);
         if (!Object.keys(patch).length) throw new ApiError(400, "Nothing to update.");
         const out = await req("/rest/v1/leads?id=eq." + encodeURIComponent(id), { method: "PATCH", body: patch, headers: { Prefer: "return=representation" } });
         if (!out.length) throw new ApiError(404, "Lead not found");
         return mapLead(out[0]);
       }
+      case "GET lead-activity": return (await req("/rest/v1/lead_activity?select=*&lead_id=eq." + encodeURIComponent(id) + "&order=created_at.desc&limit=200")) || [];
+      case "POST lead-activity": {
+        if (!["call", "whatsapp", "email", "meeting", "task", "note"].includes(body.kind)) throw new ApiError(400, "Unknown activity.");
+        const out = await req("/rest/v1/lead_activity", { method: "POST", body: { lead_id: body.leadId, kind: body.kind, detail: String(body.detail || "").slice(0, 500), actor: session && session.user ? session.user.id : null }, headers: { Prefer: "return=representation" } });
+        return out[0];
+      }
+      case "GET team-directory": return (await rpc("team_directory", {})) || [];
+      case "GET crm-settings": return (await rpc("get_crm_settings", {})) || {};
+      case "PUT crm-settings": return await rpc("save_crm_settings", { p: body });
       case "DELETE leads": {
         const out = await req("/rest/v1/leads?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: { Prefer: "return=representation" } });
         if (!out || !out.length) throw new ApiError(403, DELETE_SETUP_MSG);

@@ -109,7 +109,24 @@ function render(TEMPLATE, c, { post = null, offer = null, product = null, origin
     .replace('<!--HEAD_CODE-->', () => code.head || '')
     .replace('<!--DATA-->', () => dataScript)
     .replace('<!--NOSCRIPT-->', () => noscript)
-    .replace('<!--BODY_END-->', () => bodyEnd);
+    .replace('<!--BODY_END-->', () => bodyEnd)
+    .replace('<div class="offer-bar" id="offerBar" hidden></div>', () => offerBar(c) || '<div class="offer-bar" id="offerBar" hidden></div>');
+}
+
+// The festival offer bar is drawn on the server too, so the page doesn't jump down when the script adds it.
+const FEST = { diwali: "🪔", holi: "🎨", navratri: "🔱", eid: "🌙", christmas: "🎄", "new-year": "🎆", "independence-day": "🇮🇳", general: "✨" };
+function offerBar(c) {
+  const t = new Date(Date.now() + 5.5 * 36e5).toISOString().slice(0, 10); // India date
+  const live = c.offers.filter(o => o.published && o.showOnHome && (!o.startDate || t >= o.startDate) && (!o.endDate || t <= o.endDate))
+    .sort((a, b) => (a.endDate || "9999").localeCompare(b.endDate || "9999"));
+  const o = live[0];
+  if (!o) return '';
+  let end = '';
+  if (o.endDate) {
+    const ms = Date.parse(o.endDate + "T23:59:59+05:30") - Date.now(), d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4);
+    end = '<span class="ob-end"> · ' + (ms <= 0 ? 'Offer ended' : 'Ends in ' + (d ? d + (d === 1 ? ' day ' : ' days ') : '') + h + ' hr' + (d ? '' : ' ' + m + ' min')) + '</span>';
+  }
+  return `<div class="offer-bar" id="offerBar" data-fest="${esc(o.festival)}"><div class="wrap offer-bar-row"><span class="ob-ic" aria-hidden="true">${FEST[o.festival] || "✨"}</span><span class="ob-text"><b>${esc(o.barText || o.title)}</b>${o.discount ? ' · ' + esc(o.discount) : ''}${end}</span><a class="ob-link" href="/offer/${esc(o.slug)}" data-offer="${esc(o.slug)}">View offer →</a></div></div>`;
 }
 
 function lowestPrice(prod) {
