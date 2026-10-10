@@ -6,7 +6,7 @@
 const SB_URL = "https://twyrrvncbpzmgzkyhdei.supabase.co";
 const SB_KEY = "sb_publishable_dOKrZHex5JvjDOwn8OlV7A_y5vMotAm";
 const OBJECTS = ["settings", "theme", "seo", "widget", "code"];
-const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products"];
+const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products", "work"];
 
 async function loadContent() {
   const res = await fetch(SB_URL + "/rest/v1/site_content?select=key,value", {
@@ -46,6 +46,7 @@ function publicContent(c) {
     faqs: c.faqs,
     offers: c.offers.filter(o => o.published),
     products: c.products.filter(x => x.published),
+    work: c.work.filter(x => x.active),
     widget: c.widget.mode === 'built-in' ? { ...c.widget, customCode: undefined } : { mode: c.widget.mode },
   };
 }

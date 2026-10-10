@@ -3,7 +3,7 @@
   "use strict";
   const CFG = window.VB_SUPABASE;
   const OBJECTS = ["settings", "theme", "seo", "widget", "code"];
-  const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products"];
+  const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products", "work"];
 
   function normalize(rows) {
     const c = {};
@@ -23,6 +23,7 @@
       faqs: c.faqs,
       offers: c.offers.filter(o => o.published),
       products: c.products.filter(x => x.published),
+      work: c.work.filter(x => x.active),
       widget: c.widget.mode === "built-in" ? Object.assign({}, c.widget, { customCode: undefined }) : { mode: c.widget.mode },
     };
   }

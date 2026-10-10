@@ -46,6 +46,21 @@ const SCHEMA = {
     ],
     blank: { stage: 'Stage', title: 'New step', text: '' },
   },
+  work: {
+    kind: 'list', group: 'Content', label: 'Our work', noun: 'project', titleField: 'title',
+    help: 'Case studies and portfolio. Real results build trust faster than any claim: add the client, what you did and the number that improved.',
+    fields: [
+      ['active', 'check', 'Show on the website'],
+      ['title', 'text', 'Project name', { hint: 'e.g. Clinic appointment campaign' }],
+      ['client', 'text', 'Client or business type', { hint: 'Use the name only with the client\'s permission, e.g. Dental clinic, Indore' }],
+      ['service', 'text', 'What we did', { hint: 'e.g. WhatsApp campaign + landing page' }],
+      ['result', 'text', 'Headline result', { hint: 'e.g. 3x enquiries in 60 days' }],
+      ['summary', 'textarea', 'Short story', { hint: 'Problem, what we did, outcome. Two or three sentences' }],
+      ['image', 'image', 'Screenshot or photo'],
+      ['link', 'text', 'Link (optional)', { hint: 'Live website, video or full case study' }],
+    ],
+    blank: { active: true, title: 'New project', client: '', service: '', result: '', summary: '', image: '', link: '' },
+  },
   testimonials: {
     kind: 'list', group: 'Content', label: 'Reviews', noun: 'review', titleField: 'name',
     fields: [
@@ -214,7 +229,7 @@ const SCHEMA = {
   },
 };
 
-const SECTION_IDS = ['stats', 'services', 'store', 'process', 'reviews', 'blog', 'faq', 'contact'];
+const SECTION_IDS = ['stats', 'services', 'store', 'work', 'process', 'reviews', 'blog', 'faq', 'contact'];
 const IMAGE_RE = /^(\/uploads\/[A-Za-z0-9._-]+|\/assets\/[A-Za-z0-9._\/-]+|https:\/\/[^\s"'<>]+)$/;
 
 function slugify(s) {

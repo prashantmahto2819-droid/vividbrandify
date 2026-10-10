@@ -79,9 +79,9 @@
       else if (SCHEMA[k].kind === "object") c[k] = Object.assign(sanitize(k, {}), c[k]);
     }
     // sections added in later versions (e.g. the store) appear after services until the admin reorders them
-    const DEF = { store: { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." } };
+    const DEF = { store: { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." }, work: { id: "work", visible: true, inNav: true, label: "Our work", eyebrow: "Recent work", heading: "Results we have delivered", intro: "A few projects and campaigns, with the numbers that mattered to the client." } };
     if (Array.isArray(c.sections)) for (const id of Object.keys(DEF)) if (!c.sections.some(x => x.id === id)) {
-      const at = c.sections.findIndex(x => x.id === "services");
+      const at = c.sections.findIndex(x => x.id === (id === "work" ? "store" : "services"));
       c.sections.splice(at < 0 ? c.sections.length : at + 1, 0, DEF[id]);
     }
     cache = c;

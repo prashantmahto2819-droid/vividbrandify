@@ -58,6 +58,11 @@
         <div class="prod-grid" id="prodGrid"></div>
       </section>
 
+      <section class="block" id="work" data-section="work">
+        <div class="sec-head"></div>
+        <div class="work-grid" id="workGrid"></div>
+      </section>
+
       <section class="block" id="process" data-section="process">
         <div class="sec-head"></div>
         <div class="steps" id="steps"></div>
@@ -89,18 +94,21 @@
         <form class="form" id="leadForm" novalidate>
           <div class="two">
             <label for="fName">Your name<input id="fName" name="name" type="text" autocomplete="name" required></label>
-            <label for="fBiz">Business<input id="fBiz" name="business" type="text" autocomplete="organization"></label>
+            <label for="fPhone">Phone / WhatsApp<input id="fPhone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required></label>
           </div>
           <div class="two">
-            <label for="fPhone">Phone / WhatsApp<input id="fPhone" name="phone" type="tel" autocomplete="tel" inputmode="tel"></label>
-            <label for="fEmail">Email<input id="fEmail" name="email" type="email" autocomplete="email"></label>
+            <label for="fSvc">What do you need?<select id="fSvc" name="service"></select></label>
+            <label for="fCall"><span>Best time to call <small>optional</small></span><select id="fCall" name="callback"><option value="">Any time</option><option>As soon as possible</option><option>Morning (10 am – 1 pm)</option><option>Afternoon (1 – 5 pm)</option><option>Evening (5 – 8 pm)</option></select></label>
           </div>
           <div class="two">
-            <label for="fType">Business category<select id="fType" name="business_type"></select></label>
-            <label for="fCity">City<input id="fCity" name="city" type="text" autocomplete="address-level2"></label>
+            <label for="fBiz"><span>Business name <small>optional</small></span><input id="fBiz" name="business" type="text" autocomplete="organization"></label>
+            <label for="fType"><span>Business category <small>optional</small></span><select id="fType" name="business_type"></select></label>
           </div>
-          <label for="fSvc">What do you need?<select id="fSvc" name="service"></select></label>
-          <label for="fMsg">Tell us a little more<textarea id="fMsg" name="message" rows="4" placeholder="e.g. I run a clinic and want appointment reminders on WhatsApp"></textarea></label>
+          <div class="two">
+            <label for="fCity"><span>City <small>optional</small></span><input id="fCity" name="city" type="text" autocomplete="address-level2"></label>
+            <label for="fEmail"><span>Email <small>optional</small></span><input id="fEmail" name="email" type="email" autocomplete="email"></label>
+          </div>
+          <label for="fMsg"><span>Tell us a little more <small>optional</small></span><textarea id="fMsg" name="message" rows="3" placeholder="e.g. I run a clinic and want appointment reminders on WhatsApp"></textarea></label>
           <label class="optin" for="fOptin"><input type="checkbox" id="fOptin" name="opt_in" value="yes"> Send me offers and reminders on WhatsApp</label>
           <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
           <div><button class="btn btn-accent" type="submit" id="fSubmit">Send my enquiry</button></div>

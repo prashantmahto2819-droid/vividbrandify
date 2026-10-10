@@ -63,6 +63,10 @@ function vbStart() {
     const at = S.sections.findIndex(x => x.id === "services");
     S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." });
   }
+  if (!S.sections.some(x => x.id === "work")) {
+    const at = S.sections.findIndex(x => x.id === "store");
+    S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "work", visible: true, inNav: true, label: "Our work", eyebrow: "Recent work", heading: "Results we have delivered", intro: "A few projects and campaigns, with the numbers that mattered to the client." });
+  }
   const sectionById = Object.fromEntries(S.sections.map(s => [s.id, s]));
   function renderChrome() {
     $("logo").innerHTML = st.logo ? '<img class="logo-img" src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" width="87" height="56">'
@@ -72,6 +76,13 @@ function vbStart() {
     const contact = sectionById.contact;
     if (st.navCta && contact && contact.visible) navLinks.push('<a class="btn btn-accent btn-small" href="/#contact" data-sec="contact">' + esc(st.navCta) + '</a>');
     $("nav").innerHTML = navLinks.join("");
+    // thumb-reach action bar on phones: call and enquiry are one tap away on every page
+    if (!document.getElementById("mbar") && (st.phone || (contact && contact.visible))) {
+      const bar = document.createElement("nav"); bar.id = "mbar"; bar.className = "mbar"; bar.setAttribute("aria-label", "Quick actions");
+      bar.innerHTML = (st.phone ? '<a href="tel:' + esc(st.phone.replace(/[^\d+]/g, "")) + '" class="mb-call"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Call</a>' : '') +
+        (contact && contact.visible ? '<a href="/#contact" data-sec="contact" class="mb-cta">' + esc(st.navCta || "Get a free plan") + '</a>' : '');
+      document.body.appendChild(bar); document.body.classList.add("has-mbar");
+    }
 
     // order + visibility + headings
     const wrap = $("sections");
@@ -89,7 +100,7 @@ function vbStart() {
     // first visible block after the stats strip gets top spacing only
   }
   function sectionHasContent(id) {
-    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
+    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, work: (S.work || []).length, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
   }
 
   /* ---------- hero slider ---------- */
@@ -130,6 +141,10 @@ function vbStart() {
     const stats = lines(st.stats).map(l => l.split("|"));
     $("stats").innerHTML = stats.map(p => '<div class="stat"><b>' + esc(p[0].trim()) + '</b><span>' + esc((p[1] || "").trim()) + '</span></div>').join("");
 
+    $("workGrid").innerHTML = (S.work || []).map(w => '<article class="work-card">' +
+      '<div class="wc-media">' + (w.image ? '<img src="' + esc(w.image) + '" alt="' + esc(w.title) + '" loading="lazy">' : '<span class="wc-ph">' + esc((w.service || w.title || "").split(/[ +,]/)[0]) + '</span>') + (w.result ? '<b class="wc-result">' + esc(w.result) + '</b>' : '') + '</div>' +
+      '<div class="wc-body">' + (w.client ? '<div class="eyebrow">' + esc(w.client) + '</div>' : '') + '<h3>' + esc(w.title) + '</h3>' + (w.service ? '<p class="wc-svc">' + esc(w.service) + '</p>' : '') + (w.summary ? '<p>' + esc(w.summary) + '</p>' : '') +
+      (w.link ? '<a class="wc-link" href="' + esc(safeUrl(w.link)) + '" target="_blank" rel="noopener">See the work →</a>' : '') + '</div></article>').join("");
     $("svcGrid").innerHTML = S.services.map(v => {
       const pts = lines(v.points).map(p => '<li>' + TICK + '<span>' + esc(p) + '</span></li>').join("");
       const body = '<div class="svc-ic">' + (ICONS[v.icon] || ICONS.star) + '</div><div class="tag">' + esc(v.tag) + '</div><h3>' + esc(v.name) + '</h3><p>' + esc(v.summary) + '</p><ul>' + pts + '</ul>';
@@ -225,7 +240,7 @@ function vbStart() {
   async function saveLead(data) {
     if (data.website) return; // the hidden "website" field is a spam trap; bots fill it, people don't
     const C = window.VB_SUPABASE;
-    const lead = { name: String(data.name || "").trim().slice(0, 120), phone: String(data.phone || "").trim().slice(0, 30), email: String(data.email || "").trim().slice(0, 160), business: String(data.business || "").trim().slice(0, 160), business_type: String(data.business_type || "").slice(0, 80), city: String(data.city || "").trim().slice(0, 80), service: String(data.service || "").slice(0, 120), message: String(data.message || "").trim().slice(0, 3000), source: String(data.source || "").slice(0, 200), opt_in: data.opt_in === "yes" };
+    const lead = { name: String(data.name || "").trim().slice(0, 120), phone: String(data.phone || "").trim().slice(0, 30), email: String(data.email || "").trim().slice(0, 160), business: String(data.business || "").trim().slice(0, 160), business_type: String(data.business_type || "").slice(0, 80), city: String(data.city || "").trim().slice(0, 80), service: String(data.service || "").slice(0, 120), message: ((data.callback ? "[Best time to call: " + String(data.callback).slice(0, 40) + "] " : "") + String(data.message || "").trim()).slice(0, 3000), source: String(data.source || "").slice(0, 200), opt_in: data.opt_in === "yes" };
     const r = await fetch(C.url + "/rest/v1/leads", { method: "POST", headers: { apikey: C.key, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify(lead) });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
