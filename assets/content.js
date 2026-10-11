@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const CFG = window.VB_SUPABASE;
-  const OBJECTS = ["settings", "theme", "seo", "widget", "code", "bizcrt"];
+  const OBJECTS = ["settings", "theme", "seo", "widget", "code", "bizcrt", "legal"];
   const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products", "work"];
 
   function normalize(rows) {
@@ -25,6 +25,7 @@
       products: c.products.filter(x => x.published),
       bizcrt: c.bizcrt.published ? Object.assign({}, c.bizcrt, { live: c.bizLive || null }) : null,
       work: c.work.filter(x => x.active),
+      legal: c.legal.published ? c.legal : null,
       widget: c.widget.mode === "built-in" ? Object.assign({}, c.widget, { customCode: undefined }) : { mode: c.widget.mode },
     };
   }
@@ -92,6 +93,8 @@
     const mp = /^\/product\/([\w-]+)\/?$/.exec(location.pathname);
     window.__PRODUCT__ = mp ? mp[1] : null;
     window.__BIZ__ = /^\/bizcrt\/?$/i.test(location.pathname);
+    const ml = /^\/legal\/(terms|privacy|refunds|delivery|business)\/?$/.exec(location.pathname);
+    window.__LEGAL__ = ml ? ml[1] : null;
     return toPublic(c);
   }
 

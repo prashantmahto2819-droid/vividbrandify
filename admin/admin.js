@@ -70,7 +70,7 @@
     ["Store", [["bizcrt"], ["products"], ["orders", "Orders"], ["payments", "Payments & email"]]],
     ["Layout", [["sections"]]],
     ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
-    ["Site", [["settings"], ["theme"], ["seo"]]],
+    ["Site", [["settings"], ["legal"], ["theme"], ["seo"]]],
     ["Advanced", [["code"], ["media", "Media library"], ["account", "Account & backup"]]],
   ];
   const isStaff = () => !!(S.user && S.user.role === "staff");
@@ -93,6 +93,7 @@
     if (S.view === "products" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/product/" + encodeURIComponent(o.slug); }
     if (S.view === "orders" || S.view === "payments") return "/#store";
     if (S.view === "bizcrt") return "/bizcrt";
+    if (S.view === "legal") return "/legal/business";
     if (S.view === "offers" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/offer/" + encodeURIComponent(o.slug); }
     const map = { services: "services", steps: "process", testimonials: "reviews", posts: "blog", faqs: "faq" };
     return "/" + (map[S.view] ? "#" + map[S.view] : "");

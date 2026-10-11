@@ -5,7 +5,7 @@
 
 const SB_URL = "https://twyrrvncbpzmgzkyhdei.supabase.co";
 const SB_KEY = "sb_publishable_dOKrZHex5JvjDOwn8OlV7A_y5vMotAm";
-const OBJECTS = ["settings", "theme", "seo", "widget", "code", "bizcrt"];
+const OBJECTS = ["settings", "theme", "seo", "widget", "code", "bizcrt", "legal"];
 const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products", "work"];
 
 async function loadContent() {
@@ -61,6 +61,7 @@ function publicContent(c) {
     products: c.products.filter(x => x.published),
     bizcrt: c.bizcrt.published ? Object.assign({}, c.bizcrt, { live: c.bizLive || null }) : null,
     work: c.work.filter(x => x.active),
+    legal: c.legal.published ? c.legal : null,
     widget: c.widget.mode === 'built-in' ? { ...c.widget, customCode: undefined } : { mode: c.widget.mode },
   };
 }
@@ -68,16 +69,19 @@ function publicContent(c) {
 const siteBase = (c, origin) => (c.seo.siteUrl || origin || '').replace(/\/$/, '');
 const absUrl = (base, p) => !p ? '' : /^https?:\/\//.test(p) ? p : base + p;
 
-function render(TEMPLATE, c, { post = null, offer = null, product = null, biz = false, origin = '' } = {}) {
+// Legal pages: /legal/<slug>. Titles double as the page <title> and the footer link text.
+const LEGAL_PAGES = { terms: "Terms and conditions", privacy: "Privacy policy", refunds: "Refund and cancellation policy", delivery: "Delivery policy", business: "Business and GST details" };
+
+function render(TEMPLATE, c, { post = null, offer = null, product = null, biz = false, legal = null, origin = '' } = {}) {
   const data = publicContent(c);
   const { seo, settings, theme, code, widget } = c;
   const base = siteBase(c, origin);
 
   const B = c.bizcrt;
-  const title = biz ? `${B.name || 'BizCRT'}: ${B.tagline || 'business app'} | ${settings.brand}` : product ? `${product.name} | ${settings.brand}` : offer ? `${offer.title} | ${settings.brand}` : post ? `${post.title} | ${settings.brand}` : (seo.title || settings.brand || 'Vivid Brandify');
-  const desc = biz ? (B.intro || seo.description) : product ? (product.tagline || product.summary || seo.description) : offer ? (offer.subtitle || offer.headline || seo.description) : post ? post.excerpt : seo.description;
+  const title = legal ? `${LEGAL_PAGES[legal]} | ${settings.brand}` : biz ? `${B.name || 'BizCRT'}: ${B.tagline || 'business app'} | ${settings.brand}` : product ? `${product.name} | ${settings.brand}` : offer ? `${offer.title} | ${settings.brand}` : post ? `${post.title} | ${settings.brand}` : (seo.title || settings.brand || 'Vivid Brandify');
+  const desc = legal ? `${LEGAL_PAGES[legal]} of ${settings.brand}${c.legal.legalName ? ', a trade name of ' + c.legal.legalName : ''}${c.legal.gstin ? '. GSTIN ' + c.legal.gstin : ''}.` : biz ? (B.intro || seo.description) : product ? (product.tagline || product.summary || seo.description) : offer ? (offer.subtitle || offer.headline || seo.description) : post ? post.excerpt : seo.description;
   const img = absUrl(base, biz && (B.screenshot || B.logo) ? (B.screenshot || B.logo) : product && product.image ? product.image : offer && offer.image ? offer.image : post && post.cover ? post.cover : seo.ogImage);
-  const canonical = base + (biz ? '/bizcrt' : product ? '/product/' + product.slug : offer ? '/offer/' + offer.slug : post ? '/blog/' + post.slug : '/');
+  const canonical = base + (legal ? '/legal/' + legal : biz ? '/bizcrt' : product ? '/product/' + product.slug : offer ? '/offer/' + offer.slug : post ? '/blog/' + post.slug : '/');
 
   const head = [
     `<title>${esc(title)}</title>`,
@@ -103,6 +107,7 @@ function render(TEMPLATE, c, { post = null, offer = null, product = null, biz = 
       '@context': 'https://schema.org', '@type': 'ProfessionalService', name: settings.brand, description: seo.description,
       url: base || undefined, telephone: settings.phone || undefined, email: settings.email || undefined,
       address: settings.address || undefined, image: img || undefined,
+      legalName: c.legal.published && c.legal.legalName ? c.legal.legalName : undefined, taxID: c.legal.published && c.legal.gstin ? c.legal.gstin : undefined,
     })}</script>`,
   ].filter(Boolean).join('\n');
 
@@ -111,9 +116,14 @@ function render(TEMPLATE, c, { post = null, offer = null, product = null, biz = 
   if (theme.hero) vars.push(`--hero:${theme.hero}!important`);
   if (theme.tick) vars.push(`--tick:${theme.tick}!important`);
   const themeCss = `<style>${vars.length ? ':root{' + vars.join(';') + '}' : ''}${code.css ? '\n' + code.css.replace(/<\/style/gi, '') : ''}</style>`;
-  const dataScript = `<script>window.__SITE__=${jsonForScript(data)};window.__POST__=${jsonForScript(post ? post.slug : null)};window.__OFFER__=${jsonForScript(offer ? offer.slug : null)};window.__PRODUCT__=${jsonForScript(product ? product.slug : null)};window.__BIZ__=${biz};</script>`;
+  const dataScript = `<script>window.__SITE__=${jsonForScript(data)};window.__POST__=${jsonForScript(post ? post.slug : null)};window.__OFFER__=${jsonForScript(offer ? offer.slug : null)};window.__PRODUCT__=${jsonForScript(product ? product.slug : null)};window.__BIZ__=${biz};window.__LEGAL__=${jsonForScript(legal)};</script>`;
 
-  const noscript = post
+  const L = c.legal;
+  const noscript = legal
+    ? `<noscript><article class="wrap article"><h1>${esc(LEGAL_PAGES[legal])}</h1>${legal === 'business'
+        ? `<p>${esc(L.tradeName)} is a trade name of ${esc(L.legalName)} (${esc(L.constitution)}). GSTIN ${esc(L.gstin)}. ${esc(L.address)}.</p>`
+        : String(L[legal] || '').split(/\n\s*\n/).map(p => `<p>${esc(p.replace(/^##\s+|^-\s+/gm, '').replace(/\*\*|\[|\]\([^)]*\)/g, ''))}</p>`).join('')}</article></noscript>`
+    : post
     ? `<noscript><article class="wrap article"><h1>${esc(post.title)}</h1><p class="lede">${esc(post.excerpt)}</p>${post.body.split(/\n\s*\n/).map(p => `<p>${esc(p.replace(/^##\s+|^-\s+/gm, ''))}</p>`).join('')}</article></noscript>`
     : `<noscript><div class="wrap"><h1>${esc(settings.brand)}</h1><p>${esc(settings.tagline)}</p><ul>${data.posts.map(p => `<li><a href="/blog/${esc(p.slug)}">${esc(p.title)}</a></li>`).join('')}</ul></div></noscript>`;
 
@@ -165,6 +175,7 @@ function sitemap(c, origin) {
   const urls = [`<url><loc>${esc(base)}/</loc></url>`].concat(c.bizcrt.published ? [`<url><loc>${esc(base)}/bizcrt</loc></url>`] : [])
     .concat(c.posts.filter(p => p.published).map(p => `<url><loc>${esc(base)}/blog/${esc(p.slug)}</loc><lastmod>${p.date}</lastmod></url>`))
     .concat(c.products.filter(x => x.published && x.slug).map(x => `<url><loc>${esc(base)}/product/${esc(x.slug)}</loc></url>`))
+    .concat(c.legal.published ? Object.keys(LEGAL_PAGES).map(k => `<url><loc>${esc(base)}/legal/${k}</loc></url>`) : [])
     .concat(c.offers.filter(o => o.published && (!o.endDate || o.endDate >= new Date().toISOString().slice(0, 10))).map(o => `<url><loc>${esc(base)}/offer/${esc(o.slug)}</loc></url>`));
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`;
 }
@@ -189,7 +200,8 @@ export default {
     const offerM = /^\/offer\/([\w-]+)\/?$/.exec(p);
     const prodM = /^\/product\/([\w-]+)\/?$/.exec(p);
     const bizM = /^\/bizcrt\/?$/i.test(p);
-    const isPage = isGet && (p === "/" || !!blog || !!offerM || !!prodM || bizM);
+    const legalM = /^\/legal\/(terms|privacy|refunds|delivery|business)\/?$/.exec(p);
+    const isPage = isGet && (p === "/" || !!blog || !!offerM || !!prodM || bizM || !!legalM);
 
     if (isGet && p === "/robots.txt") {
       try {
@@ -210,6 +222,10 @@ export default {
           if (c.bizcrt.published) return new Response(render(tpl, c, { biz: true, origin: url.origin }), { headers: HTML_HEADERS });
           return new Response(render(tpl, c, { origin: url.origin }), { status: 404, headers: HTML_HEADERS });
         }
+        if (legalM) {
+          if (c.legal.published) return new Response(render(tpl, c, { legal: legalM[1], origin: url.origin }), { headers: HTML_HEADERS });
+          return new Response(render(tpl, c, { origin: url.origin }), { status: 404, headers: HTML_HEADERS });
+        }
         if (prodM) {
           const product = c.products.find(x => x.slug === prodM[1] && x.published);
           if (product) return new Response(render(tpl, c, { product, origin: url.origin }), { headers: HTML_HEADERS });
@@ -228,7 +244,7 @@ export default {
         return new Response(render(tpl, c, { origin: url.origin }), { headers: HTML_HEADERS });
       } catch (err) {
         console.error(err);
-        return env.ASSETS.fetch(blog || offerM || prodM || bizM ? new Request(url.origin + "/", request) : request);
+        return env.ASSETS.fetch(blog || offerM || prodM || bizM || legalM ? new Request(url.origin + "/", request) : request);
       }
     }
     return env.ASSETS.fetch(request);

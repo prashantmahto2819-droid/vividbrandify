@@ -107,3 +107,9 @@ Go to **Admin → WhatsApp → Chat widget**, choose **custom code**, paste your
 - **More admins:** use **Admin → Account & backup → Add admin**. Supabase's free email service only sends emails to members of your Supabase team. If a new admin doesn't get the confirmation email, either set up your own email service under **Supabase → Authentication → SMTP Settings**, or confirm that account by hand in Supabase → Authentication → Users.
 - **Uploaded images** are stored in the Supabase Storage bucket `media`.
 - **If Supabase can't be reached**, the site still opens and loads its content in the visitor's browser.
+
+## 9. Legal pages and GST details
+
+Admin → Site → **Legal & GST** holds the business details from the GST certificate (trade name, legal name, GSTIN, registered address, grievance officer) and the four policies: Terms, Privacy, Refund and cancellation, Delivery. They appear at `/legal/terms`, `/legal/privacy`, `/legal/refunds`, `/legal/delivery` and `/legal/business`, in the footer of every page and as a note at checkout. Razorpay asks for these pages when it activates your account. Have your CA or lawyer read the policies once.
+
+Invoices use the seller details under Store → **Payments & email** (GSTIN, legal business name, registered address, SAC code). Confirm the SAC code with your CA.

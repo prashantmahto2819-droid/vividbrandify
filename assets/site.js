@@ -258,7 +258,8 @@ function vbStart() {
     const social = lines(st.social).map(l => l.split("|")).filter(p => p[1]);
     $("foot").innerHTML = '<div class="foot-brand">' + (st.logo ? '<img src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" loading="lazy">' : '<b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b>') + (st.logoSub && !st.logo ? '<span class="foot-motto">' + esc(st.logoSub) + '</span>' : '') + '<span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
       '<div style="display:grid;gap:12px;justify-items:end"><nav aria-label="Footer">' + S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(secLink).join("") + (sectionById.contact && sectionById.contact.visible ? '<a href="/#contact" data-sec="contact">Contact</a>' : '') + '</nav>' +
-      (social.length ? '<div class="social">' + social.map(p => '<a href="' + esc(safeUrl(p[1].trim())) + '" target="_blank" rel="noopener">' + esc(p[0].trim()) + '</a>').join("") + '</div>' : '') + '</div>';
+      (social.length ? '<div class="social">' + social.map(p => '<a href="' + esc(safeUrl(p[1].trim())) + '" target="_blank" rel="noopener">' + esc(p[0].trim()) + '</a>').join("") + '</div>' : '') + '</div>' +
+      (L ? '<div class="foot-legal"><p>' + esc(L.tradeName || st.brand) + (L.legalName ? ' is a trade name of ' + esc(L.legalName) + (L.constitution ? ', ' + esc(L.constitution.toLowerCase()) : '') + '.' : '.') + (L.gstin ? ' <span>GSTIN <b class="lg-mono">' + esc(L.gstin) + '</b></span>' : '') + (L.address ? ' <span>' + esc(L.address) + '</span>' : '') + '</p><nav aria-label="Legal">' + Object.keys(LEGAL_PAGES).map(legalLink).join("") + '</nav></div>' : '');
   }
   function setStepCols() { $("steps").style.gridTemplateColumns = window.innerWidth > 860 && S.steps.length ? "repeat(" + S.steps.length + ",1fr)" : ""; }
   function cover(p) {
@@ -279,7 +280,7 @@ function vbStart() {
   }
 
   /* ---------- page views: home, article, offer, product, BizCRT ---------- */
-  const VIEWS = ["homeView", "articleView", "offerView", "productView", "bizView"];
+  const VIEWS = ["homeView", "articleView", "offerView", "productView", "bizView", "legalView"];
   function showOnly(id) { VIEWS.forEach(v => { const el = $(v); if (el) el.hidden = v !== id; }); }
   const offHome = () => VIEWS.slice(1).some(v => $(v) && !$(v).hidden);
 
@@ -297,6 +298,31 @@ function vbStart() {
     window.scrollTo(0, 0); stopAuto();
     return true;
   }
+  /* ---------- legal pages (/legal/terms, privacy, refunds, delivery, business) ---------- */
+  const L = S.legal;
+  const LEGAL_PAGES = { terms: "Terms and conditions", privacy: "Privacy policy", refunds: "Refund and cancellation policy", delivery: "Delivery policy", business: "Business and GST details" };
+  const legalLink = k => '<a href="/legal/' + k + '" data-legal="' + k + '">' + LEGAL_PAGES[k] + '</a>';
+  function legalBusiness() {
+    const rows = [["Trade name", L.tradeName || st.brand], ["Legal name", L.legalName], ["Type of business", L.constitution], ["GSTIN", L.gstin], ["GST registered since", L.gstSince], ["Registration type", L.gstType], ["Registered address", L.address],
+      ["Email", st.email && '<a href="mailto:' + esc(st.email) + '">' + esc(st.email) + '</a>'], ["Phone", st.phone && '<a href="tel:' + esc(st.phone.replace(/[^\d+]/g, "")) + '">' + esc(st.phone) + '</a>'],
+      ["WhatsApp", st.whatsapp && '<a href="' + esc(waLink("")) + '" target="_blank" rel="noopener">+' + esc(waNumber(st.whatsapp)) + '</a>'], ["Working hours", st.hours]];
+    const html = k => ["Email", "Phone", "WhatsApp"].includes(k);
+    return '<dl class="lg-facts">' + rows.filter(r => r[1]).map(r => '<div><dt>' + r[0] + '</dt><dd' + (r[0] === "GSTIN" ? ' class="lg-mono"' : '') + '>' + (html(r[0]) ? r[1] : esc(r[1]).replace(/\n/g, "<br>")) + '</dd></div>').join("") + '</dl>' +
+      (L.certificate ? '<p><a class="btn btn-ghost-dark btn-small" href="' + esc(safeUrl(L.certificate)) + '" target="_blank" rel="noopener">View GST registration certificate (PDF)</a></p>' : '') +
+      (L.grievanceName ? '<h2>Grievance officer</h2><p>For complaints about our services, billing or your personal data, contact <strong>' + esc(L.grievanceName) + '</strong>' + (L.grievanceEmail ? ' at <a href="mailto:' + esc(L.grievanceEmail) + '">' + esc(L.grievanceEmail) + '</a>' : '') + (L.grievancePhone ? ' or ' + esc(L.grievancePhone) : '') + '. We acknowledge complaints within 48 hours and resolve them within 30 days.</p>' : '');
+  }
+  function showLegal(slug, push) {
+    if (!L || !LEGAL_PAGES[slug]) return false;
+    $("legalView").innerHTML = '<div class="wrap lg-wrap"><nav class="lg-nav" aria-label="Legal pages">' + Object.keys(LEGAL_PAGES).map(k => legalLink(k).replace("<a ", '<a' + (k === slug ? ' aria-current="page"' : '') + ' ')).join("") + '</nav>' +
+      '<article class="article lg-doc"><h1>' + LEGAL_PAGES[slug] + '</h1>' + (L.updated ? '<p class="by">Last updated ' + fmtDate(L.updated) + '</p>' : '') +
+      (slug !== "business" ? '<p class="lg-who">' + esc(L.tradeName || st.brand) + (L.legalName ? ' is a trade name of ' + esc(L.legalName) + (L.constitution ? ' (' + esc(L.constitution.toLowerCase()) + ')' : '') : '') + (L.gstin ? ', GSTIN <span class="lg-mono">' + esc(L.gstin) + '</span>' : '') + '.</p>' : '') +
+      '<div class="article-body">' + (slug === "business" ? legalBusiness() : mdLite(L[slug])) + '</div></article></div>';
+    showOnly("legalView");
+    document.title = LEGAL_PAGES[slug] + " | " + st.brand;
+    if (push) history.pushState({ legal: slug }, "", "/legal/" + slug);
+    window.scrollTo(0, 0); stopAuto();
+    return true;
+  }
   function showHome(sectionId, push) {
     const wasArticle = offHome();
     showOnly("homeView"); document.title = homeTitle;
@@ -307,7 +333,7 @@ function vbStart() {
   }
   window.addEventListener("popstate", () => {
     const m = /^\/blog\/([\w-]+)/.exec(location.pathname), mo = /^\/offer\/([\w-]+)/.exec(location.pathname), mp = /^\/product\/([\w-]+)/.exec(location.pathname);
-    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else if (/^\/bizcrt\/?$/i.test(location.pathname)) showBiz(false); else showHome(location.hash.slice(1), false);
+    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else if (/^\/bizcrt\/?$/i.test(location.pathname)) showBiz(false); else if (/^\/legal\/(\w+)/.test(location.pathname) && showLegal(/^\/legal\/(\w+)/.exec(location.pathname)[1], false)) { /* legal page */ } else showHome(location.hash.slice(1), false);
   });
 
   /* ---------- enquiry forms (contact section and offer pages) ---------- */
@@ -573,7 +599,7 @@ function vbStart() {
         '<div class="two"><label>State<select name="state" required><option value="">Select your state</option>' + Object.entries(STATES).sort((a, b) => a[1].localeCompare(b[1])).map(([c, n]) => '<option value="' + c + '">' + esc(n) + '</option>').join("") + '</select></label>' +
         '<label>GSTIN <small>(optional, for input tax credit)</small><input name="gstin" maxlength="15" autocapitalize="characters" placeholder="e.g. 23ABCDE1234F1Z5"></label></div></div>' +
       '<div class="co-out" aria-live="polite"></div><button class="btn btn-accent co-pay" type="submit">Pay ' + inr(total) + ' securely</button>' +
-      '<p class="co-safe">🔒 Payments are handled by Razorpay. We never see your card or UPI details.</p></form>';
+      '<p class="co-safe">🔒 Payments are handled by Razorpay. We never see your card or UPI details.' + (L ? '<br>By paying, you agree to our <a href="/legal/terms" target="_blank" rel="noopener">terms</a> and <a href="/legal/refunds" target="_blank" rel="noopener">refund policy</a>.' : '') + '</p></form>';
     document.body.appendChild(m); document.body.classList.add("co-open");
     const f = m.querySelector("form"), out = m.querySelector(".co-out"), btn = m.querySelector(".co-pay");
     const g = s.tax;
@@ -761,6 +787,7 @@ function vbStart() {
     if (a.dataset.post) { e.preventDefault(); showPost(a.dataset.post, true); return; }
     if (a.dataset.offer) { e.preventDefault(); showOffer(a.dataset.offer, true); return; }
     if (a.dataset.product) { e.preventDefault(); showProduct(a.dataset.product, true); return; }
+    if (a.dataset.legal && L) { e.preventDefault(); showLegal(a.dataset.legal, true); return; }
     if (a.dataset.biz) { e.preventDefault(); showBiz(true); return; }
     if (a.dataset.jump) { e.preventDefault(); const el = document.getElementById(a.dataset.jump); if (el) { el.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); const f = el.querySelector("input"); if (f) setTimeout(() => f.focus({ preventScroll: true }), 400); } return; }
     if (a.dataset.sec === "top") { e.preventDefault(); showHome("", true); window.scrollTo(0, 0); return; }
@@ -798,6 +825,7 @@ function vbStart() {
   if (window.__POST__ && showPost(window.__POST__, false)) { /* article view */ }
   else if (window.__PRODUCT__ && showProduct(window.__PRODUCT__, false)) { /* product page */ }
   else if (window.__BIZ__ && showBiz(false)) { /* BizCRT page */ }
+  else if (window.__LEGAL__ && showLegal(window.__LEGAL__, false)) { /* legal page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
   // show the page once the brand fonts are in (capped), so headlines don't reflow or flash in a fallback face

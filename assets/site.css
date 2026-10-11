@@ -862,3 +862,28 @@ body.co-open{overflow:hidden}
 /* six-track grid so a last row of two cards shares the width evenly */
 @media (min-width:961px){.svc-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.svc{grid-column:span 2}.svc.half{grid-column:span 3}.svc.featured,.svc.wide{grid-column:1/-1}}
 .svc-art{max-height:150px;width:100%}
+
+/* ---------- legal pages and footer business line ---------- */
+.lg-wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;align-items:start;padding-block:48px 0}
+.lg-nav{position:sticky;top:calc(96px + env(safe-area-inset-top,0px));display:grid;gap:2px;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.lg-nav a{padding:9px 12px;border-radius:9px;text-decoration:none;color:var(--muted);font-weight:500;font-size:15px}
+.lg-nav a:hover{color:var(--ink);background:var(--bg)}
+.lg-nav a[aria-current="page"]{color:var(--ink);background:var(--accent-soft);font-weight:600}
+.lg-doc{margin:0;padding-top:0;max-width:760px}
+.lg-doc .article-body{font-size:16.5px;line-height:1.7}
+.lg-doc .article-body h2{font-size:22px;margin-top:18px}
+.lg-doc .article-body a{color:var(--ink)}
+.lg-who{padding:12px 16px;border-left:3px solid var(--accent);background:var(--surface);border-radius:0 10px 10px 0;color:var(--muted);font-size:15px}
+.lg-mono{font-family:var(--mono);letter-spacing:.02em}
+.lg-facts{margin:0;display:grid;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.lg-facts div{display:grid;grid-template-columns:200px minmax(0,1fr);gap:16px;padding:14px 18px}
+.lg-facts div+div{border-top:1px solid var(--line)}
+.lg-facts dt{color:var(--muted);font-size:14.5px}
+.lg-facts dd{margin:0;font-weight:600}
+@media (max-width:860px){.lg-wrap{grid-template-columns:1fr;gap:20px;padding-top:24px}.lg-nav{position:static;display:flex;overflow-x:auto;scrollbar-width:none}.lg-nav a{white-space:nowrap}.lg-facts div{grid-template-columns:1fr;gap:2px}}
+.foot-legal{flex-basis:100%;display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 24px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.foot-legal p{max-width:70ch}
+
+.foot-legal nav{display:flex;flex-wrap:wrap;gap:4px 16px}
+.foot-legal nav a{padding:4px 0}
+.foot-legal p span{margin-left:8px}.foot-legal p span:last-child{display:block;margin-left:0;margin-top:2px}
