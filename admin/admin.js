@@ -67,7 +67,7 @@
   const NAV = [
     ["", [["dashboard", "Dashboard"]]],
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
-    ["Store", [["products"], ["orders", "Orders"], ["payments", "Payments & email"]]],
+    ["Store", [["bizcrt"], ["products"], ["orders", "Orders"], ["payments", "Payments & email"]]],
     ["Layout", [["sections"]]],
     ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
     ["Site", [["settings"], ["theme"], ["seo"]]],
@@ -92,6 +92,7 @@
     if (S.view === "posts" && S.sel && S.draft) { const p = S.draft.find(x => x.id === S.sel); if (p && p.slug && p.published) return "/blog/" + encodeURIComponent(p.slug); }
     if (S.view === "products" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/product/" + encodeURIComponent(o.slug); }
     if (S.view === "orders" || S.view === "payments") return "/#store";
+    if (S.view === "bizcrt") return "/bizcrt";
     if (S.view === "offers" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/offer/" + encodeURIComponent(o.slug); }
     const map = { services: "services", steps: "process", testimonials: "reviews", posts: "blog", faqs: "faq" };
     return "/" + (map[S.view] ? "#" + map[S.view] : "");
@@ -224,6 +225,7 @@
     if (m) { const o = (S.content.offers || []).find(x => x.slug === m[1]); return "Offer page: " + (o ? o.title : m[1]); }
     if (/^\/blog\//.test(l.source || "")) return "Blog article";
     if (/^\/product\//.test(l.source || "")) return "Online purchase";
+    if (/^\/bizcrt/.test(l.source || "")) return "BizCRT page";
     return "Website contact form";
   }
   const waNum = p => String(p || "").replace(/\D/g, "").replace(/^0+/, "").replace(/^(\d{10})$/, "91$1");

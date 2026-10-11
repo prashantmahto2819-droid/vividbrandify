@@ -179,6 +179,37 @@ const SCHEMA = {
       ['social', 'lines', 'Social links', { hint: 'One per line: Name|https://…  e.g. Instagram|https://instagram.com/yourpage' }],
     ],
   },
+  bizcrt: {
+    kind: 'object', group: 'Store', label: 'BizCRT page',
+    help: 'Your BizCRT product page at /bizcrt and its spotlight on the home page. Plans, module prices and add-ons come live from BizCRT, so they update when you change them there.',
+    fields: [
+      ['published', 'check', 'Show the BizCRT page'],
+      ['showOnHome', 'check', 'Show the BizCRT spotlight on the home page'],
+      ['livePricing', 'check', 'Show live plans and prices from BizCRT'],
+      ['name', 'text', 'Product name'],
+      ['logo', 'image', 'Product logo', { hint: 'Optional. Square or wide PNG' }],
+      ['screenshot', 'image', 'App screenshot', { hint: 'Optional. Replaces the drawn app preview at the top of the page' }],
+      ['tagline', 'text', 'Tagline'],
+      ['headline', 'text', 'Headline'],
+      ['intro', 'textarea', 'Intro paragraph', { hint: 'Also used for Google and WhatsApp link previews' }],
+      ['ctaLabel', 'text', 'Main button label'],
+      ['ctaUrl', 'text', 'Main button link', { hint: 'Sign-up or trial page on bizcrt.com' }],
+      ['loginLabel', 'text', 'Log-in link label'],
+      ['loginUrl', 'text', 'Log-in link'],
+      ['demoLabel', 'text', 'Demo button label'],
+      ['trialNote', 'text', 'Line under the buttons'],
+      ['highlights', 'lines', 'Why BizCRT', { hint: 'One per line: Title|short text' }],
+      ['whoFor', 'lines', 'Made for', { hint: 'One business type per line' }],
+      ['steps', 'lines', 'How it works', { hint: 'One per line: Step|short text' }],
+      ['bundleNote', 'textarea', 'Module pricing note'],
+      ['priceNote', 'text', 'Note under prices'],
+      ['resellerText', 'textarea', 'Reseller / white-label programme'],
+      ['affiliateText', 'textarea', 'Affiliate programme'],
+      ['faqs', 'lines', 'FAQ', { hint: 'One per line: Question|Answer' }],
+      ['homeHeading', 'text', 'Home page spotlight heading'],
+      ['homeText', 'textarea', 'Home page spotlight text'],
+    ],
+  },
   theme: {
     kind: 'object', group: 'Site', label: 'Colours',
     fields: [
@@ -229,7 +260,7 @@ const SCHEMA = {
   },
 };
 
-const SECTION_IDS = ['stats', 'services', 'store', 'work', 'process', 'reviews', 'blog', 'faq', 'contact'];
+const SECTION_IDS = ['stats', 'services', 'bizcrt', 'store', 'work', 'process', 'reviews', 'blog', 'faq', 'contact'];
 const IMAGE_RE = /^(\/uploads\/[A-Za-z0-9._-]+|\/assets\/[A-Za-z0-9._\/-]+|https:\/\/[^\s"'<>]+)$/;
 
 function slugify(s) {

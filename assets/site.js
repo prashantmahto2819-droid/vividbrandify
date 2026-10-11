@@ -59,8 +59,12 @@ function vbStart() {
   }
 
   /* ---------- header, nav, sections ---------- */
-  if (!S.sections.some(x => x.id === "store")) {
+  if (!S.sections.some(x => x.id === "bizcrt")) {
     const at = S.sections.findIndex(x => x.id === "services");
+    S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "bizcrt", visible: true, inNav: true, label: (S.bizcrt && S.bizcrt.name) || "BizCRT", eyebrow: "", heading: "", intro: "" });
+  }
+  if (!S.sections.some(x => x.id === "store")) {
+    const at = S.sections.findIndex(x => x.id === "bizcrt");
     S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." });
   }
   if (!S.sections.some(x => x.id === "work")) {
@@ -68,11 +72,13 @@ function vbStart() {
     S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "work", visible: true, inNav: true, label: "Our work", eyebrow: "Recent work", heading: "Results we have delivered", intro: "A few projects and campaigns, with the numbers that mattered to the client." });
   }
   const sectionById = Object.fromEntries(S.sections.map(s => [s.id, s]));
+  const secLink = s => s.id === "bizcrt" ? '<a href="/bizcrt" data-biz="1">' + esc(s.label) + '</a>' : '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>';
+
   function renderChrome() {
     $("logo").innerHTML = st.logo ? '<img class="logo-img" src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" width="87" height="56">'
       : '<span class="logo-mark">' + TICK + '</span><span>' + esc(st.brand) + (st.logoSub ? '<small>' + esc(st.logoSub) + '</small>' : '') + '</span>';
     $("logo").setAttribute("aria-label", st.brand + " home");
-    const navLinks = S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(s => '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>');
+    const navLinks = S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(secLink);
     const contact = sectionById.contact;
     if (st.navCta && contact && contact.visible) navLinks.push('<a class="btn btn-accent btn-small" href="/#contact" data-sec="contact">' + esc(st.navCta) + '</a>');
     $("nav").innerHTML = navLinks.join("");
@@ -100,7 +106,7 @@ function vbStart() {
     // first visible block after the stats strip gets top spacing only
   }
   function sectionHasContent(id) {
-    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, work: (S.work || []).length, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
+    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, work: (S.work || []).length, bizcrt: S.bizcrt && S.bizcrt.showOnHome ? 1 : 0, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
   }
 
   /* ---------- hero slider ---------- */
@@ -178,6 +184,7 @@ function vbStart() {
     $("ctLines").innerHTML = ls.map(l => '<div class="cline"><span class="k">' + esc(l[0]) + '</span>' + (l[2] ? '<a class="v" href="' + esc(l[2]) + '"' + (/^https/.test(l[2]) ? ' target="_blank" rel="noopener"' : '') + '>' + esc(l[1]) + '</a>' : '<span class="v">' + esc(l[1]).replace(/\n/g, "<br>") + '</span>') + '</div>').join("");
     const liveOffers = OFFERS.filter(o => offerState(o) === "live");
     $("fSvc").innerHTML = S.services.map(v => '<option>' + esc(v.name) + '</option>').join("") +
+      (S.bizcrt ? '<option>' + esc((S.bizcrt.name || "BizCRT") + ": free demo") + '</option>' : '') +
       ((S.products || []).length ? '<optgroup label="Software">' + S.products.map(x => '<option>' + esc(("Product: " + x.name).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       (liveOffers.length ? '<optgroup label="Festival offers">' + liveOffers.map(o => '<option>' + esc(("Offer: " + o.title).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       '<option>Not sure yet</option>';
@@ -186,7 +193,7 @@ function vbStart() {
 
     const social = lines(st.social).map(l => l.split("|")).filter(p => p[1]);
     $("foot").innerHTML = '<div class="foot-brand">' + (st.logo ? '<img src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" loading="lazy">' : '<b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b>') + (st.logoSub ? '<span class="foot-motto">' + esc(st.logoSub) + '</span>' : '') + '<span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
-      '<div style="display:grid;gap:12px;justify-items:end"><nav aria-label="Footer">' + S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(s => '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>').join("") + (sectionById.contact && sectionById.contact.visible ? '<a href="/#contact" data-sec="contact">Contact</a>' : '') + '</nav>' +
+      '<div style="display:grid;gap:12px;justify-items:end"><nav aria-label="Footer">' + S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(secLink).join("") + (sectionById.contact && sectionById.contact.visible ? '<a href="/#contact" data-sec="contact">Contact</a>' : '') + '</nav>' +
       (social.length ? '<div class="social">' + social.map(p => '<a href="' + esc(safeUrl(p[1].trim())) + '" target="_blank" rel="noopener">' + esc(p[0].trim()) + '</a>').join("") + '</div>' : '') + '</div>';
   }
   function setStepCols() { $("steps").style.gridTemplateColumns = window.innerWidth > 860 && S.steps.length ? "repeat(" + S.steps.length + ",1fr)" : ""; }
@@ -207,6 +214,11 @@ function vbStart() {
     }).join("");
   }
 
+  /* ---------- page views: home, article, offer, product, BizCRT ---------- */
+  const VIEWS = ["homeView", "articleView", "offerView", "productView", "bizView"];
+  function showOnly(id) { VIEWS.forEach(v => { const el = $(v); if (el) el.hidden = v !== id; }); }
+  const offHome = () => VIEWS.slice(1).some(v => $(v) && !$(v).hidden);
+
   /* ---------- blog article view (real URLs: /blog/slug) ---------- */
   const homeTitle = document.title;
   function showPost(slug, push) {
@@ -215,15 +227,15 @@ function vbStart() {
     $("article").innerHTML = '<a class="btn btn-ghost btn-small back" href="/#blog" data-sec="blog">← All posts</a><div class="meta-line"><span>' + esc(p.category) + '</span><span>' + fmtDate(p.date) + '</span><span>' + esc(p.readTime) + ' read</span></div><h1>' + esc(p.title) + '</h1><p class="lede">' + esc(p.excerpt) + '</p>' + (p.author ? '<p class="by">By ' + esc(p.author) + '</p>' : '') +
       '<div class="article-cover">' + cover(p) + '</div><div class="article-body">' + mdLite(p.body) + '</div>' +
       '<div class="contact" style="margin-top:24px;grid-template-columns:1fr;padding:32px"><h2 style="font-size:28px">Want this set up for your business?</h2><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-accent" href="/#contact" data-sec="contact">Talk to us →</a>' + (st.whatsapp ? '<a class="btn btn-ghost" href="' + esc(waLink("Hi, I just read \"" + p.title + "\" and want to know more.")) + '" target="_blank" rel="noopener">Chat on WhatsApp</a>' : '') + '</div></div>';
-    $("homeView").hidden = true; $("offerView").hidden = true; $("productView").hidden = true; $("articleView").hidden = false;
+    showOnly("articleView");
     document.title = p.title + " | " + st.brand;
     if (push) history.pushState({ post: slug }, "", "/blog/" + slug);
     window.scrollTo(0, 0); stopAuto();
     return true;
   }
   function showHome(sectionId, push) {
-    const wasArticle = !$("articleView").hidden || !$("offerView").hidden || !$("productView").hidden;
-    $("articleView").hidden = true; $("offerView").hidden = true; $("productView").hidden = true; $("homeView").hidden = false; document.title = homeTitle;
+    const wasArticle = offHome();
+    showOnly("homeView"); document.title = homeTitle;
     if (push) history.pushState({}, "", "/" + (sectionId ? "#" + sectionId : ""));
     if (wasArticle || push) startAuto();
     const el = sectionId && document.getElementById(sectionId);
@@ -231,7 +243,7 @@ function vbStart() {
   }
   window.addEventListener("popstate", () => {
     const m = /^\/blog\/([\w-]+)/.exec(location.pathname), mo = /^\/offer\/([\w-]+)/.exec(location.pathname), mp = /^\/product\/([\w-]+)/.exec(location.pathname);
-    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else showHome(location.hash.slice(1), false);
+    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else if (/^\/bizcrt\/?$/i.test(location.pathname)) showBiz(false); else showHome(location.hash.slice(1), false);
   });
 
   /* ---------- enquiry forms (contact section and offer pages) ---------- */
@@ -340,7 +352,7 @@ function vbStart() {
         '<label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>' +
         '<button class="btn btn-accent" type="submit">' + esc(o.ctaLabel || "Claim this offer") + '</button><div class="form-out" aria-live="polite"></div></form></aside></div>';
     bindLeadForm($("offerForm"), { service: ("Offer: " + o.title).slice(0, 120), success: "Thanks! We've received your request for " + o.title + ". Our team will contact you shortly." });
-    $("homeView").hidden = true; $("articleView").hidden = true; $("productView").hidden = true; $("offerView").hidden = false;
+    showOnly("offerView");
     document.title = o.title + " | " + st.brand;
     if (push) history.pushState({ offer: slug }, "", "/offer/" + slug);
     window.scrollTo(0, 0); stopAuto();
@@ -462,7 +474,7 @@ function vbStart() {
           (st.phone ? '<a class="btn btn-small btn-ghost-dark" href="tel:' + esc(st.phone.replace(/[^\d+]/g, "")) + '">Call ' + esc(st.phone) + '</a>' : '') +
           '<a class="btn btn-small btn-ghost-dark" href="/" data-sec="top">Visit website</a></div></div>' +
       '</div>';
-    $("homeView").hidden = true; $("articleView").hidden = true; $("offerView").hidden = true; $("productView").hidden = false;
+    showOnly("productView");
     document.title = x.name + " | " + st.brand;
     if (push) history.pushState({ product: slug }, "", "/product/" + slug);
     window.scrollTo(0, 0); stopAuto();
@@ -562,6 +574,122 @@ function vbStart() {
     });
   }
 
+  /* ---------- BizCRT: product page (/bizcrt) and home spotlight ---------- */
+  const BZ = S.bizcrt || null;
+  const BZL = (BZ && BZ.live) || { plans: [], modules: [], addons: [] };
+  const bzName = () => (BZ && BZ.name) || "BizCRT";
+  const svgI = d => '<svg viewBox="0 0 24 24" aria-hidden="true">' + d + '</svg>';
+  const BZ_IC = {
+    core: svgI('<path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M8.5 11h7M8.5 14h4"/>'),
+    kits: svgI('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/>'),
+    staff: svgI('<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.5A5 5 0 0 1 21 19"/>'),
+    chatbot_ai: svgI('<rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16h5"/>'),
+    automation: svgI('<rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M9 6h4a3 3 0 0 1 3 3v6"/>'),
+    campaigns: svgI('<path d="M4 10v4h3l6 4V6L7 10z"/><path d="M17 9a4 4 0 0 1 0 6M19.5 6.5a8 8 0 0 1 0 11"/>'),
+    social: svgI('<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/>'),
+    billing: svgI('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>'),
+    inventory: svgI('<path d="M4 6v12M7 6v12M10 6v12M14 6v12M16 6v12M20 6v12"/>'),
+    appointments: svgI('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3"/>'),
+    forms: svgI('<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>'),
+    store: svgI('<path d="M5 8h14l-1 12H6z"/><path d="M9 8a3 3 0 0 1 6 0"/>'),
+    api: svgI('<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13 6l-2 12"/>'),
+    complaints: svgI('<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'),
+    events: svgI('<path d="M4 8a2 2 0 0 0 0 4v4h16v-4a2 2 0 0 1 0-4V4H4z"/><path d="M14 4v12"/>'),
+  };
+  const FEAT = { inbox: "WhatsApp team inbox", contacts: "Contacts", message_builder: "Message builder", catalog: "Product catalogue", business_page: "Business page", quick_setup: "Quick setup", staff: "Staff & attendance", ai: "AI assistant", chatbots: "Chatbot", appointments: "Appointments", billing: "GST bills & quotations", integrations: "IndiaMART, Justdial & Sheets", inventory: "Stock & barcode billing", kits: "Business kit & follow-ups", page_premium: "Premium business page", sms: "SMS automation", social: "Facebook & Instagram", campaigns: "Broadcast campaigns", events: "Events & QR passes", flows: "Flow builder", forms: "Forms + payments", store: "Online store", api: "Developer API & webhooks", complaints: "Complaint desk", leads: "Lead capture rules" };
+  const LIMITS = [["agents", "team member"], ["numbers", "WhatsApp number"], ["contacts", "contacts"], ["social_accounts", "social account"]];
+  const rp = paise => "₹" + Math.round((paise || 0) / 100).toLocaleString("en-IN");
+  // the app stores plan blurbs in Hindi; the site is in English, so use English lines for the standard plans
+  const PLAN_EN = { Free: "For testing: 1 number and the basic inbox", Basic: "For small businesses: chatbot, billing, appointments", Pro: "For growing businesses: flows, campaigns, social posts", Enterprise: "For large teams and agencies: everything, API, higher limits" };
+  const planBlurb = p => /[\u0900-\u097F]/.test(p.description || "") ? (PLAN_EN[p.name] || "") : (p.description || "");
+  const pairs = t => lines(t).map(l => { const i = l.indexOf("|"); return i < 0 ? [l, ""] : [l.slice(0, i).trim(), l.slice(i + 1).trim()]; });
+  const fromPlan = () => { const paid = BZL.plans.filter(p => p.price_month_paise > 0); return paid.length ? Math.min(...paid.map(p => p.price_month_paise)) : 0; };
+  function appMock() {
+    return '<div class="bz-app" aria-hidden="true"><div class="bz-app-bar"><i></i><i></i><i></i><span>' + esc(bzName()) + '</span></div><div class="bz-app-body">' +
+      '<nav class="bz-side">' + [["core", "Inbox", 12], ["social", "Leads", 5], ["billing", "Bills", 0], ["staff", "Staff", 0], ["appointments", "Bookings", 3]].map((x, i) => '<span class="' + (i === 0 ? "on" : "") + '">' + BZ_IC[x[0]] + x[1] + (x[2] ? '<b>' + x[2] + '</b>' : '') + '</span>').join("") + '</nav>' +
+      '<div class="bz-list">' + [["Priya Salon", "Can I book for Sunday 4 pm?", "hot", "2m"], ["Rahul Traders", "Please send the GST bill", "paid", "8m"], ["Dr. Mehta Clinic", "Thanks, payment done ✓", "", "20m"], ["Ankit (IndiaMART)", "Price for 50 units?", "new", "1h"]].map((c, i) => '<div class="bz-row' + (i === 0 ? " on" : "") + '"><span class="bz-av">' + c[0][0] + '</span><span class="bz-rt"><b>' + c[0] + '</b><small>' + c[1] + '</small></span><span class="bz-rm">' + c[3] + (c[2] ? '<em class="t-' + c[2] + '">' + ({ hot: "Hot lead", paid: "Paid", new: "New" })[c[2]] + '</em>' : '') + '</span></div>').join("") + '</div>' +
+      '<div class="bz-chat"><div class="bz-msg in">Can I book for Sunday 4 pm?</div><div class="bz-msg out">Sunday 4:00 pm is free ✅ Confirm your slot?<span class="bz-btns"><i>Confirm</i><i>Other time</i></span></div><div class="bz-msg out pay">Payment link · ₹499<small>UPI · Cards · Netbanking</small></div><div class="bz-msg in">Paid 👍</div></div>' +
+      '</div></div>';
+  }
+  function bizPlans(period) {
+    const P = BZL.plans; if (!P.length) return '';
+    const priceOf = p => period === "year" ? p.price_year_paise : period === "life" ? p.price_lifetime_paise : p.price_month_paise;
+    let prev = [];
+    return '<div class="bz-plans" style="--n:' + Math.min(P.length, 4) + '">' + P.map((p, i) => {
+      const feats = (p.features || []), extra = feats.filter(f => !prev.includes(f) && FEAT[f]).map(f => FEAT[f]);
+      const head = i === 0 || !prev.length ? '' : '<p class="bz-inc">Everything in ' + esc(P[i - 1].name) + ', plus:</p>';
+      prev = feats;
+      const pr = priceOf(p), save = period === "year" && p.price_month_paise ? Math.round(100 - p.price_year_paise / (p.price_month_paise * 12) * 100) : 0;
+      return '<div class="plan bz-plan' + (p.highlight ? " hot" : "") + '">' + (p.highlight ? '<span class="plan-flag">Most popular · free trial</span>' : '') +
+        '<h3>' + esc(p.name) + '</h3><p class="bz-pdesc">' + esc(planBlurb(p)) + '</p>' +
+        '<div class="plan-price"><b>' + (p.is_free ? "₹0" : rp(pr)) + '</b><span>' + (p.is_free ? "forever" : period === "year" ? "per year" : period === "life" ? "one-time" : "per month") + '</span></div>' +
+        (save > 0 ? '<p class="plan-setup bz-save">Save ' + save + '% vs monthly</p>' : '<p class="plan-setup">&nbsp;</p>') +
+        '<ul class="bz-lim">' + LIMITS.filter(([k]) => p.limits && p.limits[k]).map(([k, lab]) => '<li><b>' + Number(p.limits[k]).toLocaleString("en-IN") + '</b> ' + lab + (p.limits[k] > 1 && !/s$/.test(lab) ? "s" : "") + '</li>').join("") + '</ul>' +
+        head + '<ul class="bz-feats">' + extra.slice(0, 9).map(f => '<li>' + TICK1 + '<span>' + esc(f) + '</span></li>').join("") + (extra.length > 9 ? '<li class="more">+ ' + (extra.length - 9) + ' more</li>' : '') + '</ul>' +
+        '<a class="btn ' + (p.highlight ? "btn-accent" : "btn-ghost-dark") + ' plan-buy" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="plan-' + esc(p.name) + '">' + (p.is_free ? "Start free" : p.highlight ? "Start free trial" : "Choose " + esc(p.name)) + '</a></div>';
+    }).join("") + '</div>';
+  }
+  function showBiz(push) {
+    if (!BZ) return false;
+    const mods = BZL.modules, addons = BZL.addons, hl = pairs(BZ.highlights), steps = pairs(BZ.steps), faqs = pairs(BZ.faqs), who = lines(BZ.whoFor);
+    const from = fromPlan();
+    $("bizView").innerHTML =
+      '<section class="bz-hero"><div class="wrap bz-hero-grid"><div class="bz-copy">' +
+        '<a class="back-link" href="/" data-sec="top">← ' + esc(st.brand) + '</a>' +
+        '<div class="bz-brand">' + (BZ.logo ? '<img src="' + esc(BZ.logo) + '" alt="' + esc(bzName()) + '" height="40">' : '<span class="bz-mark">' + esc(bzName().slice(0, 2)) + '</span><b>' + esc(bzName()) + '</b>') + '<span class="bz-by">by ' + esc(st.brand) + '</span></div>' +
+        '<h1>' + esc(BZ.headline || BZ.tagline) + '</h1><p class="bz-lede">' + esc(BZ.intro) + '</p>' +
+        '<div class="offer-ctas"><a class="btn btn-accent" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="hero">' + esc(BZ.ctaLabel || "Start free trial") + ' →</a><a class="btn btn-ghost" href="#bzDemo" data-jump="bzDemo">' + esc(BZ.demoLabel || "Book a free demo") + '</a></div>' +
+        (BZ.trialNote ? '<p class="bz-note">' + esc(BZ.trialNote) + '</p>' : '') +
+        (BZ.loginUrl ? '<a class="bz-login" href="' + esc(safeUrl(BZ.loginUrl)) + '" target="_blank" rel="noopener">' + esc(BZ.loginLabel || "Log in") + ' ↗</a>' : '') +
+      '</div><div class="bz-visual">' + (BZ.screenshot ? '<img src="' + esc(BZ.screenshot) + '" alt="' + esc(bzName()) + ' app">' : appMock()) + '</div></div>' +
+      '<div class="wrap bz-strip">' + [[mods.length ? mods.length + " modules" : "All-in-one", "inbox to invoices"], [from ? "From " + rp(from) + "/mo" : "Free plan", "free plan to start"], ["Official API", "Meta WhatsApp Cloud API"], ["Hindi + English", "made for India"]].map(x => '<div><b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span></div>').join("") + '</div></section>' +
+      '<div class="wrap bz-body">' +
+        (hl.length ? '<section class="bz-hl">' + hl.map(([t, d], i) => '<div><span class="bz-num">0' + (i + 1) + '</span><h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></div>').join("") + '</section>' : '') +
+        (mods.length ? '<section id="bzModules"><div class="sec-head"><div><div class="eyebrow">Features</div><h2>Everything your business runs on, in one app</h2></div><p>Switch on what you need today and add more as you grow. Every module works with the WhatsApp inbox and your contacts.</p></div>' +
+          '<div class="bz-mods">' + mods.map(m => '<article class="bz-mod' + (m.required ? " core" : "") + '"><span class="bz-ic">' + (BZ_IC[m.key] || BZ_IC.core) + '</span><div><h3>' + esc(m.name_en || m.name) + (m.required ? ' <em>included</em>' : '') + '</h3><p>' + esc(m.description_en || m.description || "") + '</p>' + (m.price_month_paise ? '<small>' + (m.required ? "Base" : "Add for") + ' ' + rp(m.price_month_paise) + '/month</small>' : '') + '</div></article>').join("") + '</div>' +
+          (BZ.bundleNote ? '<p class="bz-bundle">💡 ' + esc(BZ.bundleNote) + '</p>' : '') + '</section>' : '') +
+        (who.length ? '<section class="bz-who"><h2>Made for</h2><div>' + who.map(w => '<span>' + esc(w) + '</span>').join("") + '</div></section>' : '') +
+        (steps.length ? '<section><div class="sec-head"><div><div class="eyebrow">How it works</div><h2>Live in a day, not a month</h2></div><p>No installation. Works in the browser on phone and computer.</p></div><ol class="bz-steps">' + steps.map(([t, d]) => '<li><h3>' + esc(t) + '</h3><p>' + esc(d) + '</p></li>').join("") + '</ol></section>' : '') +
+        (BZL.plans.length ? '<section id="bzPricing"><div class="sec-head"><div><div class="eyebrow">Pricing</div><h2>Simple plans. Start free.</h2></div><p>' + esc(BZ.priceNote || "") + '</p></div>' +
+          '<div class="seg bz-period" role="group" aria-label="Billing period"><button data-bzp="month" class="on">Monthly</button><button data-bzp="year">Yearly</button>' + (BZL.plans.some(p => p.price_lifetime_paise) ? '<button data-bzp="life">Lifetime</button>' : '') + '</div>' +
+          '<div id="bzPlans">' + bizPlans("month") + '</div>' +
+          (addons.length ? '<div class="bz-addons"><h3>Need a bit more?</h3><div>' + addons.map(a => '<span><b>' + esc(a.name_en || a.name) + '</b>' + rp(a.price_month_paise) + '/month</span>').join("") + '</div></div>' : '') + '</section>' : '') +
+        (BZ.resellerText || BZ.affiliateText ? '<section class="bz-partners">' +
+          (BZ.resellerText ? '<div><span class="eyebrow">White label</span><h3>Become a ' + esc(bzName()) + ' reseller</h3><p>' + esc(BZ.resellerText) + '</p><a class="btn btn-small btn-accent" href="#bzDemo" data-jump="bzDemo" data-bzpick="Reseller programme">Apply as reseller</a></div>' : '') +
+          (BZ.affiliateText ? '<div><span class="eyebrow">Affiliate</span><h3>Refer and earn</h3><p>' + esc(BZ.affiliateText) + '</p><a class="btn btn-small btn-ghost-dark" href="#bzDemo" data-jump="bzDemo" data-bzpick="Affiliate programme">Join the affiliate programme</a></div>' : '') + '</section>' : '') +
+        (faqs.length ? '<section><div class="sec-head"><div><div class="eyebrow">FAQ</div><h2>Questions about ' + esc(bzName()) + '</h2></div><p></p></div><div class="faq">' + faqs.map(([q, a]) => '<details><summary>' + esc(q) + '</summary><p>' + esc(a) + '</p></details>').join("") + '</div></section>' : '') +
+        '<section class="contact bz-demo" id="bzDemo"><div class="contact-copy"><div class="eyebrow">Free demo</div><h2>See ' + esc(bzName()) + ' with your own business</h2><p>Share your details and our team will show you the app on a call, set up your WhatsApp number and suggest the right plan.</p>' +
+          '<div class="offer-ctas"><a class="btn btn-accent" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="demo">' + esc(BZ.ctaLabel || "Start free trial") + '</a>' + (st.whatsapp ? '<a class="btn btn-ghost" href="' + esc(waLink("Hi, I want to know more about " + bzName() + ".")) + '" target="_blank" rel="noopener">Ask on WhatsApp</a>' : '') + '</div></div>' +
+          '<form class="form" id="bzForm" novalidate><div class="two"><label>Your name<input name="name" autocomplete="name" required></label><label>Phone / WhatsApp<input name="phone" type="tel" inputmode="tel" autocomplete="tel" required></label></div>' +
+          '<div class="two"><label><span>Business name <small>optional</small></span><input name="business" autocomplete="organization"></label><label>I want<select name="service" id="bzWant"><option>' + esc(bzName()) + ': free demo</option><option>' + esc(bzName()) + ': setup help</option><option>' + esc(bzName()) + ': Reseller programme</option><option>' + esc(bzName()) + ': Affiliate programme</option></select></label></div>' +
+          '<div class="two"><label><span>Business category <small>optional</small></span><select name="business_type">' + typeOptions() + '</select></label><label><span>City <small>optional</small></span><input name="city" autocomplete="address-level2"></label></div>' +
+          '<label class="optin"><input type="checkbox" name="opt_in" value="yes"> Send me updates and offers on WhatsApp</label><label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>' +
+          '<div><button class="btn btn-accent" type="submit">Book my free demo</button></div><div class="form-out" aria-live="polite"></div></form></section>' +
+      '</div>';
+    bindLeadForm($("bzForm"), { success: "Thanks! Our team will call you to book your " + bzName() + " demo." });
+    $("bizView").onclick = e => {
+      const pb = e.target.closest("[data-bzp]");
+      if (pb) { $("bizView").querySelectorAll("[data-bzp]").forEach(b => b.classList.toggle("on", b === pb)); $("bzPlans").innerHTML = bizPlans(pb.dataset.bzp); return; }
+      const pick = e.target.closest("[data-bzpick]"); if (pick) { const sel = $("bzWant"), o = [...sel.options].find(x => x.value.endsWith(pick.dataset.bzpick)); if (o) sel.value = o.value; }
+    };
+    showOnly("bizView");
+    document.title = bzName() + ": " + (BZ.tagline || "business app") + " | " + st.brand;
+    if (push) history.pushState({ biz: 1 }, "", "/bizcrt");
+    window.scrollTo(0, 0); stopAuto();
+    return true;
+  }
+  function renderBizSpotlight() {
+    const el = $("bizSpot"); if (!el) return;
+    if (!BZ || !BZ.showOnHome) { el.innerHTML = ""; return; }
+    const from = fromPlan(), mods = BZL.modules.length ? BZL.modules.slice(0, 8) : Object.keys(BZ_IC).slice(0, 8).map(k => ({ key: k, name_en: FEAT[k] || k }));
+    el.innerHTML = '<div class="bz-spot"><div class="bz-spot-copy"><div class="bz-brand">' + (BZ.logo ? '<img src="' + esc(BZ.logo) + '" alt="' + esc(bzName()) + '" height="34">' : '<span class="bz-mark">' + esc(bzName().slice(0, 2)) + '</span><b>' + esc(bzName()) + '</b>') + '<span class="bz-by">Our product</span></div>' +
+      '<h2>' + esc(BZ.homeHeading || BZ.tagline) + '</h2><p>' + esc(BZ.homeText || BZ.intro) + '</p>' +
+      '<div class="bz-chips">' + mods.map(m => '<span>' + (BZ_IC[m.key] || BZ_IC.core) + esc(m.name_en || m.name) + '</span>').join("") + '</div>' +
+      '<div class="offer-ctas"><a class="btn btn-accent" href="/bizcrt" data-biz="1">Explore ' + esc(bzName()) + ' →</a><a class="btn btn-ghost" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="home">' + esc(BZ.ctaLabel || "Start free trial") + '</a></div>' +
+      '<p class="bz-note">' + (from ? 'Free plan available · paid plans from ' + rp(from) + '/month' : esc(BZ.trialNote || "")) + '</p></div>' +
+      '<div class="bz-spot-visual">' + (BZ.screenshot ? '<img src="' + esc(BZ.screenshot) + '" alt="' + esc(bzName()) + ' app" loading="lazy">' : appMock()) + '</div></div>';
+  }
+
   /* ---------- events ---------- */
   document.addEventListener("click", e => {
     const a = e.target.closest("a");
@@ -569,12 +697,13 @@ function vbStart() {
     if (a.dataset.post) { e.preventDefault(); showPost(a.dataset.post, true); return; }
     if (a.dataset.offer) { e.preventDefault(); showOffer(a.dataset.offer, true); return; }
     if (a.dataset.product) { e.preventDefault(); showProduct(a.dataset.product, true); return; }
+    if (a.dataset.biz) { e.preventDefault(); showBiz(true); return; }
     if (a.dataset.jump) { e.preventDefault(); const el = document.getElementById(a.dataset.jump); if (el) { el.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); const f = el.querySelector("input"); if (f) setTimeout(() => f.focus({ preventScroll: true }), 400); } return; }
     if (a.dataset.sec === "top") { e.preventDefault(); showHome("", true); window.scrollTo(0, 0); return; }
     if (a.dataset.sec || (a.getAttribute("href") || "").startsWith("/#")) {
       e.preventDefault();
       const id = a.dataset.sec || a.getAttribute("href").slice(2);
-      if (!$("articleView").hidden || !$("offerView").hidden || !$("productView").hidden) showHome(id, true);
+      if (offHome()) showHome(id, true);
       else { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); history.replaceState({}, "", "/#" + id); }
       if (a.dataset.service) { const o = [...$("fSvc").options].find(x => x.value === a.dataset.service); if (o) $("fSvc").value = o.value; }
       $("nav").classList.remove("open"); $("menuBtn").setAttribute("aria-expanded", "false");
@@ -596,9 +725,10 @@ function vbStart() {
   window.addEventListener("resize", setStepCols);
 
   /* ---------- boot ---------- */
-  renderChrome(); renderHero(); renderSections(); renderOffers(); renderStore(); renderWidget();
+  renderChrome(); renderHero(); renderSections(); renderOffers(); renderStore(); renderBizSpotlight(); renderWidget();
   if (window.__POST__ && showPost(window.__POST__, false)) { /* article view */ }
   else if (window.__PRODUCT__ && showProduct(window.__PRODUCT__, false)) { /* product page */ }
+  else if (window.__BIZ__ && showBiz(false)) { /* BizCRT page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
   document.documentElement.classList.remove("vb-boot");

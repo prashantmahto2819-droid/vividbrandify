@@ -54,3 +54,9 @@
 -- public.lead_activity   timeline (created, stage, owner, priority, value, note, call, whatsapp, email, meeting, task, followup)
 -- triggers: leads_classify (before insert), leads_sync (before update), leads_log_insert / leads_log_update, lead_activity_touch
 -- RPCs: team_directory(), get_crm_settings(), save_crm_settings(p)
+
+-- BizCRT marketing page (/bizcrt)
+-- site_content 'bizcrt': editable copy (headline, highlights, steps, FAQ, partner programmes, links) in Admin → Store → BizCRT page.
+-- Plans, module prices and add-ons are read live (publishable key) from the BizCRT tables public.plans (platform plans),
+-- public.plan_modules and public.plan_addons, so the page follows price changes made in the app.
+-- Leads from /bizcrt are tagged 'bizcrt' (and 'partner' for reseller / affiliate requests) by private.lead_classify().

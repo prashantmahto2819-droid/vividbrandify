@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const CFG = window.VB_SUPABASE;
-  const OBJECTS = ["settings", "theme", "seo", "widget", "code"];
+  const OBJECTS = ["settings", "theme", "seo", "widget", "code", "bizcrt"];
   const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products", "work"];
 
   function normalize(rows) {
@@ -23,6 +23,7 @@
       faqs: c.faqs,
       offers: c.offers.filter(o => o.published),
       products: c.products.filter(x => x.published),
+      bizcrt: c.bizcrt.published ? Object.assign({}, c.bizcrt, { live: c.bizLive || null }) : null,
       work: c.work.filter(x => x.active),
       widget: c.widget.mode === "built-in" ? Object.assign({}, c.widget, { customCode: undefined }) : { mode: c.widget.mode },
     };
@@ -55,8 +56,18 @@
     m.setAttribute("content", value);
   }
 
+  const BIZ_Q = {
+    plans: "plans?select=name,description,price_month_paise,price_year_paise,price_lifetime_paise,limits,features,highlight,is_free,sort&reseller_id=is.null&custom_org=is.null&is_active=eq.true&order=sort",
+    modules: "plan_modules?select=key,name,name_en,description,description_en,price_month_paise,required,sort&is_active=eq.true&order=sort",
+    addons: "plan_addons?select=key,name,name_en,price_month_paise,sort&is_active=eq.true&order=sort",
+  };
   async function load() {
     const c = await fetchContent();
+    if (c.bizcrt.published && c.bizcrt.livePricing !== false) {
+      const get = q => fetch(CFG.url + "/rest/v1/" + q, { headers: { apikey: CFG.key } }).then(r => r.ok ? r.json() : []).catch(() => []);
+      const [plans, modules, addons] = await Promise.all([get(BIZ_Q.plans), get(BIZ_Q.modules), get(BIZ_Q.addons)]);
+      c.bizLive = { plans, modules, addons };
+    }
     const { theme, seo, code, widget, settings } = c;
     const vars = [];
     if (theme.accent) vars.push("--accent:" + theme.accent + "!important");
@@ -80,6 +91,7 @@
     window.__OFFER__ = mo ? mo[1] : null;
     const mp = /^\/product\/([\w-]+)\/?$/.exec(location.pathname);
     window.__PRODUCT__ = mp ? mp[1] : null;
+    window.__BIZ__ = /^\/bizcrt\/?$/i.test(location.pathname);
     return toPublic(c);
   }
 

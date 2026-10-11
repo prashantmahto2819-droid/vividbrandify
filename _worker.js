@@ -5,7 +5,7 @@
 
 const SB_URL = "https://twyrrvncbpzmgzkyhdei.supabase.co";
 const SB_KEY = "sb_publishable_dOKrZHex5JvjDOwn8OlV7A_y5vMotAm";
-const OBJECTS = ["settings", "theme", "seo", "widget", "code"];
+const OBJECTS = ["settings", "theme", "seo", "widget", "code", "bizcrt"];
 const LISTS = ["sections", "slides", "services", "steps", "testimonials", "posts", "faqs", "offers", "products", "work"];
 
 async function loadContent() {
@@ -24,6 +24,19 @@ async function loadContent() {
   c.offers = c.offers.map(o => Object.assign({ title: "", subtitle: "", slug: "", image: "", endDate: "", startDate: "" }, o));
   c.products = c.products.map(x => Object.assign({ name: "", slug: "", tagline: "", summary: "", image: "", plans: "" }, x));
   return c;
+}
+
+const BIZ_Q = {
+  plans: "plans?select=name,description,price_month_paise,price_year_paise,price_lifetime_paise,limits,features,highlight,is_free,sort&reseller_id=is.null&custom_org=is.null&is_active=eq.true&order=sort",
+  modules: "plan_modules?select=key,name,name_en,description,description_en,price_month_paise,required,sort&is_active=eq.true&order=sort",
+  addons: "plan_addons?select=key,name,name_en,price_month_paise,sort&is_active=eq.true&order=sort",
+};
+// Live plans, module prices and add-ons straight from the BizCRT tables (public, read-only), so prices stay in step with the app.
+async function loadBizLive() {
+  const get = q => fetch(SB_URL + "/rest/v1/" + q, { headers: { apikey: SB_KEY }, cf: { cacheTtlByStatus: { "200-299": 60, "300-599": 0 }, cacheEverything: true } })
+    .then(r => r.ok ? r.json() : []).catch(() => []);
+  const [plans, modules, addons] = await Promise.all([get(BIZ_Q.plans), get(BIZ_Q.modules), get(BIZ_Q.addons)]);
+  return { plans, modules, addons };
 }
 
 async function loadTemplate(env, origin) {
@@ -46,6 +59,7 @@ function publicContent(c) {
     faqs: c.faqs,
     offers: c.offers.filter(o => o.published),
     products: c.products.filter(x => x.published),
+    bizcrt: c.bizcrt.published ? Object.assign({}, c.bizcrt, { live: c.bizLive || null }) : null,
     work: c.work.filter(x => x.active),
     widget: c.widget.mode === 'built-in' ? { ...c.widget, customCode: undefined } : { mode: c.widget.mode },
   };
@@ -54,15 +68,16 @@ function publicContent(c) {
 const siteBase = (c, origin) => (c.seo.siteUrl || origin || '').replace(/\/$/, '');
 const absUrl = (base, p) => !p ? '' : /^https?:\/\//.test(p) ? p : base + p;
 
-function render(TEMPLATE, c, { post = null, offer = null, product = null, origin = '' } = {}) {
+function render(TEMPLATE, c, { post = null, offer = null, product = null, biz = false, origin = '' } = {}) {
   const data = publicContent(c);
   const { seo, settings, theme, code, widget } = c;
   const base = siteBase(c, origin);
 
-  const title = product ? `${product.name} | ${settings.brand}` : offer ? `${offer.title} | ${settings.brand}` : post ? `${post.title} | ${settings.brand}` : (seo.title || settings.brand || 'Vivid Brandify');
-  const desc = product ? (product.tagline || product.summary || seo.description) : offer ? (offer.subtitle || offer.headline || seo.description) : post ? post.excerpt : seo.description;
-  const img = absUrl(base, product && product.image ? product.image : offer && offer.image ? offer.image : post && post.cover ? post.cover : seo.ogImage);
-  const canonical = base + (product ? '/product/' + product.slug : offer ? '/offer/' + offer.slug : post ? '/blog/' + post.slug : '/');
+  const B = c.bizcrt;
+  const title = biz ? `${B.name || 'BizCRT'}: ${B.tagline || 'business app'} | ${settings.brand}` : product ? `${product.name} | ${settings.brand}` : offer ? `${offer.title} | ${settings.brand}` : post ? `${post.title} | ${settings.brand}` : (seo.title || settings.brand || 'Vivid Brandify');
+  const desc = biz ? (B.intro || seo.description) : product ? (product.tagline || product.summary || seo.description) : offer ? (offer.subtitle || offer.headline || seo.description) : post ? post.excerpt : seo.description;
+  const img = absUrl(base, biz && (B.screenshot || B.logo) ? (B.screenshot || B.logo) : product && product.image ? product.image : offer && offer.image ? offer.image : post && post.cover ? post.cover : seo.ogImage);
+  const canonical = base + (biz ? '/bizcrt' : product ? '/product/' + product.slug : offer ? '/offer/' + offer.slug : post ? '/blog/' + post.slug : '/');
 
   const head = [
     `<title>${esc(title)}</title>`,
@@ -76,7 +91,7 @@ function render(TEMPLATE, c, { post = null, offer = null, product = null, origin
     `<meta property="og:url" content="${esc(canonical)}">`,
     img ? `<meta property="og:image" content="${esc(img)}"><meta name="twitter:card" content="summary_large_image">` : '',
     settings.favicon ? `<link rel="icon" href="${esc(settings.favicon)}">` : '',
-    `<script type="application/ld+json">${jsonForScript(product ? {
+    `<script type="application/ld+json">${jsonForScript(biz ? bizLd(c, canonical, img) : product ? {
       '@context': 'https://schema.org', '@type': 'Product', name: product.name, description: product.tagline || product.summary, image: img || undefined, url: canonical,
       brand: { '@type': 'Brand', name: settings.brand },
       offers: lowestPrice(product) ? { '@type': 'Offer', priceCurrency: 'INR', price: lowestPrice(product), availability: 'https://schema.org/InStock', url: canonical } : undefined,
@@ -96,7 +111,7 @@ function render(TEMPLATE, c, { post = null, offer = null, product = null, origin
   if (theme.hero) vars.push(`--hero:${theme.hero}!important`);
   if (theme.tick) vars.push(`--tick:${theme.tick}!important`);
   const themeCss = `<style>${vars.length ? ':root{' + vars.join(';') + '}' : ''}${code.css ? '\n' + code.css.replace(/<\/style/gi, '') : ''}</style>`;
-  const dataScript = `<script>window.__SITE__=${jsonForScript(data)};window.__POST__=${jsonForScript(post ? post.slug : null)};window.__OFFER__=${jsonForScript(offer ? offer.slug : null)};window.__PRODUCT__=${jsonForScript(product ? product.slug : null)};</script>`;
+  const dataScript = `<script>window.__SITE__=${jsonForScript(data)};window.__POST__=${jsonForScript(post ? post.slug : null)};window.__OFFER__=${jsonForScript(offer ? offer.slug : null)};window.__PRODUCT__=${jsonForScript(product ? product.slug : null)};window.__BIZ__=${biz};</script>`;
 
   const noscript = post
     ? `<noscript><article class="wrap article"><h1>${esc(post.title)}</h1><p class="lede">${esc(post.excerpt)}</p>${post.body.split(/\n\s*\n/).map(p => `<p>${esc(p.replace(/^##\s+|^-\s+/gm, ''))}</p>`).join('')}</article></noscript>`
@@ -130,6 +145,16 @@ function offerBar(c) {
   return `<div class="offer-bar" id="offerBar" data-fest="${esc(o.festival)}"><div class="wrap offer-bar-row"><span class="ob-ic" aria-hidden="true">${FEST[o.festival] || "✨"}</span><span class="ob-text"><b>${esc(o.barText || o.title)}</b>${o.discount ? ' · ' + esc(o.discount) : ''}${end}</span><a class="ob-link" href="/offer/${esc(o.slug)}" data-offer="${esc(o.slug)}">View offer →</a></div></div>`;
 }
 
+function bizLd(c, url, img) {
+  const B = c.bizcrt, plans = (c.bizLive && c.bizLive.plans) || [];
+  const prices = plans.map(p => Math.round((p.price_month_paise || 0) / 100));
+  return {
+    '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: B.name || 'BizCRT', applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android, iOS (browser)',
+    description: B.intro, url, image: img || undefined, publisher: { '@type': 'Organization', name: c.settings.brand },
+    offers: prices.length ? { '@type': 'AggregateOffer', priceCurrency: 'INR', lowPrice: Math.min(...prices), highPrice: Math.max(...prices), offerCount: prices.length } : undefined,
+  };
+}
+
 function lowestPrice(prod) {
   const prices = String(prod.plans || '').split('\n').map(l => Number(String(l.split('|')[1] || '').replace(/[^\d.]/g, ''))).filter(n => n > 0);
   return prices.length ? Math.min(...prices) : 0;
@@ -137,7 +162,7 @@ function lowestPrice(prod) {
 
 function sitemap(c, origin) {
   const base = siteBase(c, origin);
-  const urls = [`<url><loc>${esc(base)}/</loc></url>`]
+  const urls = [`<url><loc>${esc(base)}/</loc></url>`].concat(c.bizcrt.published ? [`<url><loc>${esc(base)}/bizcrt</loc></url>`] : [])
     .concat(c.posts.filter(p => p.published).map(p => `<url><loc>${esc(base)}/blog/${esc(p.slug)}</loc><lastmod>${p.date}</lastmod></url>`))
     .concat(c.products.filter(x => x.published && x.slug).map(x => `<url><loc>${esc(base)}/product/${esc(x.slug)}</loc></url>`))
     .concat(c.offers.filter(o => o.published && (!o.endDate || o.endDate >= new Date().toISOString().slice(0, 10))).map(o => `<url><loc>${esc(base)}/offer/${esc(o.slug)}</loc></url>`));
@@ -163,7 +188,8 @@ export default {
     const blog = /^\/blog\/([\w-]+)\/?$/.exec(p);
     const offerM = /^\/offer\/([\w-]+)\/?$/.exec(p);
     const prodM = /^\/product\/([\w-]+)\/?$/.exec(p);
-    const isPage = isGet && (p === "/" || !!blog || !!offerM || !!prodM);
+    const bizM = /^\/bizcrt\/?$/i.test(p);
+    const isPage = isGet && (p === "/" || !!blog || !!offerM || !!prodM || bizM);
 
     if (isGet && p === "/robots.txt") {
       try {
@@ -179,6 +205,11 @@ export default {
     if (isPage) {
       try {
         const [c, tpl] = await Promise.all([loadContent(), loadTemplate(env, url.origin)]);
+        if ((p === "/" || bizM) && c.bizcrt.published && c.bizcrt.livePricing !== false) c.bizLive = await loadBizLive();
+        if (bizM) {
+          if (c.bizcrt.published) return new Response(render(tpl, c, { biz: true, origin: url.origin }), { headers: HTML_HEADERS });
+          return new Response(render(tpl, c, { origin: url.origin }), { status: 404, headers: HTML_HEADERS });
+        }
         if (prodM) {
           const product = c.products.find(x => x.slug === prodM[1] && x.published);
           if (product) return new Response(render(tpl, c, { product, origin: url.origin }), { headers: HTML_HEADERS });
@@ -197,7 +228,7 @@ export default {
         return new Response(render(tpl, c, { origin: url.origin }), { headers: HTML_HEADERS });
       } catch (err) {
         console.error(err);
-        return env.ASSETS.fetch(blog || offerM || prodM ? new Request(url.origin + "/", request) : request);
+        return env.ASSETS.fetch(blog || offerM || prodM || bizM ? new Request(url.origin + "/", request) : request);
       }
     }
     return env.ASSETS.fetch(request);
