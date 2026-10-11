@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#24100F">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/assets/site.css">
 <script>document.documentElement.classList.add("vb-boot")</script>
 <!--THEME-->
@@ -37,8 +37,9 @@
         <div class="hero-foot" id="heroFoot">
           <div class="dots" id="dots" role="tablist" aria-label="Choose slide"></div>
           <div class="arrows">
-            <button class="arrow" id="prev" aria-label="Previous slide">←</button>
-            <button class="arrow" id="next" aria-label="Next slide">→</button>
+            <span class="count" id="heroCount" aria-live="polite"></span>
+            <button class="arrow" id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <button class="arrow" id="next" aria-label="Next slide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
           </div>
         </div>
       </div>
@@ -75,7 +76,7 @@
       <section class="block" id="reviews" data-section="reviews">
         <div class="sec-head"></div>
         <div class="quotes" id="quotes" tabindex="0" aria-label="Reviews, scroll sideways"></div>
-        <div class="row-ctrl"><button id="qPrev" aria-label="Previous review">←</button><button id="qNext" aria-label="Next review">→</button></div>
+        <div class="row-ctrl"><button id="qPrev" aria-label="Previous review"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button><button id="qNext" aria-label="Next review"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button></div>
       </section>
 
       <section class="block" id="blog" data-section="blog">

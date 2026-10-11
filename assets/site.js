@@ -4,6 +4,7 @@ function vbStart() {
   const S = window.__SITE__;
   if (!S) return;
   const st = S.settings;
+  if (!st.logo) st.logo = "/assets/brand/logo.png"; // the brand logo ships with the site; an uploaded one replaces it
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const TICK = '<svg class="ticks" viewBox="0 0 18 11" aria-hidden="true"><path d="M1 6l3.5 3.5L11 2"/><path d="M7 9.5L15.5 1"/></svg>';
@@ -30,24 +31,44 @@ function vbStart() {
   }
 
   /* ---------- live visuals ---------- */
+  const visKind = icon => ({ web: "website", crm: "crm", app: "growth", bot: "chat", star: "software", chat: "chat", voice: "voice", software: "software", video: "video", growth: "growth" })[icon] || "software";
   function visual(kind, item) {
     const brand = esc(st.brand || "Brand");
     if (kind === "image" && item.image) return '<img class="img-visual" src="' + esc(item.image) + '" alt="" loading="lazy">';
-    if (kind === "voice") return '<div class="panel"><div class="panel-h"><span>Voice broadcast · 00:32</span><span class="pill live">Live</span></div><div class="wave">' + Array.from({ length: 32 }, (_, i) => '<i style="height:' + (20 + Math.round(Math.abs(Math.sin(i * 1.7)) * 80)) + '%;animation-delay:-' + (i % 7) * .17 + 's"></i>').join("") + '</div><div class="ivr"><div class="hit"><kbd>1</kbd>Talk to sales now</div><div><kbd>2</kbd>Request a callback</div><div><kbd>3</kbd>Stop these calls</div></div></div>';
-    if (kind === "software") return '<div class="panel"><div class="panel-h"><span>Festive offer · 2,400 contacts</span><span class="pill">Example</span></div><div class="funnel"><div class="frow"><span>Sent</span><span class="bar"><b style="width:100%"></b></span><span>2,400</span></div><div class="frow"><span>Delivered</span><span class="bar"><b style="width:94%"></b></span><span>2,256</span></div><div class="frow"><span>Read</span><span class="bar"><b style="width:71%"></b></span><span>1,704</span></div><div class="frow"><span>Replied</span><span class="bar"><b style="width:18%"></b></span><span>432</span></div></div><div class="small-note">Sample dashboard view. Figures are illustrative.</div></div>';
-    if (kind === "video") return '<div class="vid"><div class="vid-screen"><span class="pill vid-tag">9:16 · Hindi VO</span><div class="presenter"></div><div class="vid-cap">Flat 20% off this weekend only</div></div><div class="vid-tl"><span>Hook</span><span class="on">Offer</span><span>Proof</span><span>CTA</span></div></div>';
-    if (kind === "website") return '<div class="browser"><div class="browser-bar"><i></i><i></i><i></i><span>' + esc((st.brand || "yourbusiness").toLowerCase().replace(/[^a-z0-9]+/g, "")) + '.com</span></div>' +
-      '<div class="browser-page"><div class="bp-nav"><b></b><span></span><span></span><span></span><em></em></div>' +
-      '<div class="bp-hero"><div><span class="l1"></span><span class="l2"></span><span class="l3"></span><em>Book now</em></div><div class="bp-img"></div></div>' +
-      '<div class="bp-cards"><span></span><span></span><span></span></div></div>' +
-      '<div class="browser-chip">' + TICK + ' Admin panel · changes saved</div></div>';
+    if (kind === "voice") return '<div class="panel"><div class="panel-h"><span>Diwali offer call <small>0:32</small></span><span class="pill live">Live</span></div><div class="wave">' + Array.from({ length: 32 }, (_, i) => '<i style="height:' + (20 + Math.round(Math.abs(Math.sin(i * 1.7)) * 80)) + '%;animation-delay:-' + (i % 7) * .17 + 's"></i>').join("") + '</div><div class="ivr"><div class="hit"><kbd>1</kbd>Talk to sales now</div><div><kbd>2</kbd>Request a callback</div><div><kbd>3</kbd>Stop these calls</div></div></div>';
+    if (kind === "software") return '<div class="panel"><div class="panel-h"><span>Festive offer campaign</span><span class="pill">2,400 contacts</span></div><div class="funnel"><div class="frow"><span>Sent</span><span class="bar"><b style="width:100%"></b></span><span>2,400</span></div><div class="frow"><span>Delivered</span><span class="bar"><b style="width:94%"></b></span><span>2,256</span></div><div class="frow"><span>Read</span><span class="bar"><b style="width:71%"></b></span><span>1,704</span></div><div class="frow"><span>Replied</span><span class="bar"><b style="width:18%"></b></span><span>432</span></div></div><div class="small-note">Sample dashboard view. Figures are illustrative.</div></div>';
+    if (kind === "video") return '<div class="cmp cmp-vid">' +
+      '<div class="ed"><div class="ed-bar"><i></i><i></i><i></i><span>Diwali offer ad</span><em>Exporting 1080p</em></div>' +
+      '<div class="ed-view"><div class="ed-scene"><small>Festive sale</small><b>Flat 20% off</b><span>This weekend only</span></div><div class="ed-cap"><mark>Flat 20% off</mark> this weekend only</div></div>' +
+      '<div class="ed-tl"><div class="ed-head"></div>' +
+      '<div class="ed-tr"><span>Video</span><div><i style="flex:2"></i><i class="on" style="flex:3"></i><i style="flex:2"></i><i style="flex:1.4"></i></div></div>' +
+      '<div class="ed-tr"><span>Voice</span><div class="ed-wave">' + Array.from({ length: 60 }, (_, i) => '<b style="height:' + (20 + Math.round(Math.abs(Math.sin(i * 0.9) * Math.cos(i * 0.37)) * 80)) + '%"></b>').join("") + '</div></div>' +
+      '<div class="ed-tr"><span>Captions</span><div><i class="cp" style="flex:1.5"></i><i class="cp" style="flex:2"></i><i class="cp" style="flex:1.2"></i><i class="cp" style="flex:2"></i></div></div></div></div>' +
+      '<div class="reel"><div class="reel-prog"><i></i></div><div class="reel-av"><span class="ra-head"></span><span class="ra-body"></span></div>' +
+      '<div class="reel-side"><i>♥</i><i>➦</i></div><div class="reel-cap">Only this weekend:<br><mark>flat 20% off</mark></div><div class="reel-user"><span></span>yourbrand</div></div>' +
+      '<div class="cmp-chip c-lang"><b>AI voice-over</b><span class="on">Hindi</span><span>English</span><span>Tamil</span></div></div>';
+    if (kind === "website") return '<div class="cmp cmp-web">' +
+      '<div class="browser"><div class="browser-bar"><i></i><i></i><i></i><span>sharmadental.in</span></div>' +
+      '<div class="site"><div class="site-nav"><b><i></i>Sharma Dental</b><span>Treatments</span><span>Doctors</span><span>Contact</span><em>Book visit</em></div>' +
+      '<div class="site-hero"><div class="site-copy"><b>Gentle dental care, booked in a minute</b><p>Open all week in Indore, with same-day appointments.</p><span class="site-ctas"><em>Book appointment</em><u>Call us</u></span></div>' +
+      '<div class="site-img"><span class="site-rating"><b>4.9 ★</b><small>320 Google reviews</small></span></div></div>' +
+      '<div class="site-cards"><span><b>Cleaning</b><small>from ₹799</small></span><span><b>Braces</b><small>EMI available</small></span><span><b>Implants</b><small>Free check-up</small></span></div></div></div>' +
+      '<div class="mob"><div class="mob-scr"><div class="mob-nav"><i></i><b>Sharma Dental</b></div><div class="mob-img"></div><b class="mob-h">Gentle dental care, booked in a minute</b><em>Book appointment</em><div class="mob-row"><span>Cleaning</span><span>Braces</span></div></div></div>' +
+      '<div class="cmp-chip c-speed"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="98 100"/></svg><b>98</b><span>Speed score<small>on mobile</small></span></div>' +
+      '<div class="cmp-chip c-lead"><span class="cl-ic">' + WA_ICON + '</span><span><b>New enquiry</b><small>Priya wants a Sunday slot</small></span></div></div>';
     if (kind === "crm") {
-      const col = (name, n, cards) => '<div class="crm-col"><div class="crm-h"><span>' + name + '</span><b>' + n + '</b></div>' + cards.map(c => '<div class="crm-card"><b>' + c[0] + '</b><span class="crm-src s-' + c[1].toLowerCase() + '">' + c[1] + '</span><small>' + c[2] + '</small></div>').join("") + '</div>';
-      return '<div class="panel crm"><div class="panel-h"><span>Leads pipeline</span><span class="pill">Example</span></div><div class="crm-board">' +
+      // a live board: one new lead lands, gets dragged to Follow-up, then to Won
+      const f = !!(item && item.featured);
+      const card = c => '<div class="crm-card"><b>' + c[0] + '</b><span class="crm-src s-' + c[1].toLowerCase() + '">' + c[1] + '</span><small>' + c[2] + '</small></div>';
+      const col = (name, n, cards) => '<div class="crm-col"><div class="crm-h"><span>' + name + '</span><b>' + n + '</b></div>' + cards.map(card).join("") + '</div>';
+      return '<div class="panel crm"><div class="crm-toast"><i></i>New WhatsApp lead: Dev, Cafe</div><div class="panel-h"><span>Leads pipeline</span><span class="pill">Example</span></div><div class="crm-board">' +
         col("New", 12, [["Ritu, Salon", "WhatsApp", "Reply today"], ["Arjun, Clinic", "Website", "Call 4 pm"]]) +
-        col("Follow-up", 8, [["Meera, School", "Call", "Send quote"], ["Kabir, Gym", "WhatsApp", "Demo Fri"]]) +
-        col("Won", 3, [["Sana, Bakery", "Website", "Onboarding"]]) +
-        '</div><div class="small-note">Sample board. Names and numbers are illustrative.</div></div>';
+        col("Follow-up", 8, [["Meera, School", "Call", "Send quote"]].concat(f ? [["Kabir, Gym", "WhatsApp", "Demo Fri"]] : [])) +
+        col("Won", '<span class="n1">3</span><span class="n2">4</span>', [["Sana, Bakery", "Website", "Onboarding"]].concat(f ? [["Ravi, Coaching", "Call", "Paid ₹22,000"]] : [])) +
+        '<div class="crm-fly"><b>Dev, Cafe</b><span class="crm-src s-whatsapp">WhatsApp</span><small><i>Reply sent</i><i>Demo booked</i><i>Paid ₹18,000</i></small>' +
+        '<svg class="crm-cur" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6 1.5L10 19z"/></svg></div></div>' +
+        (f ? '<div class="crm-stats"><span><b>18</b>replied today</span><span><b>6</b>follow-ups due</span><span><b><span class="n1">₹2.4L</span><span class="n2">₹2.6L</span></b>won this month</span></div>' : '') +
+        '<div class="small-note">Sample board. Names and numbers are illustrative.</div></div>';
     }
     if (kind === "growth") return '<div class="panel"><div class="panel-h"><span>Leads by channel</span><span class="pill">Example</span></div><div class="bars"><div><b style="height:78px"></b>Search</div><div><b style="height:112px"></b>WhatsApp</div><div><b style="height:60px"></b>Social</div><div><b style="height:92px"></b>Ads</div></div><div class="small-note">Illustrative figures.</div></div>';
     const ini = esc((st.brand || "V").trim().charAt(0));
@@ -57,6 +78,41 @@ function vbStart() {
       '<div class="bub out pop">Yes, on every combo. Want me to reserve one for pickup?<span class="meta">10:04 ' + TICK + '</span></div>' +
       '<div class="bub pop">Yes please, 2 of them 🙌<span class="meta">10:05</span></div></div></div>';
   }
+
+
+  /* ---------- service illustrations (drawn with the brand tokens, so they follow light and dark) ---------- */
+  const bars = (x0, y, hs, cls) => hs.map((h, i) => '<rect class="' + (cls ? cls[i % cls.length] : "f1") + '" x="' + (x0 + i * 8) + '" y="' + (y - h / 2) + '" width="4.5" height="' + h + '" rx="2.25"/>').join("");
+  const ART = {
+    bot: '<rect class="p o" x="18" y="36" width="64" height="54" rx="16"/><path class="o" d="M50 36V24"/><circle class="f1" cx="50" cy="20" r="6"/><rect class="f3" x="28" y="49" width="44" height="22" rx="11"/><circle class="f2" cx="41" cy="60" r="4.5"/><circle class="f2" cx="59" cy="60" r="4.5"/><path class="o" d="M43 80h14"/>' +
+      '<rect class="p o" x="98" y="16" width="112" height="30" rx="12"/><text x="110" y="35">Open on Sunday?</text><rect class="f1" x="112" y="56" width="116" height="30" rx="12"/><text class="tk" x="124" y="75">Yes, 10 am to 6 pm</text>' +
+      '<rect class="p o" x="98" y="96" width="44" height="18" rx="9"/><circle class="f2" cx="111" cy="105" r="2.6"/><circle class="f2" cx="120" cy="105" r="2.6"/><circle class="f2" cx="129" cy="105" r="2.6"/><path class="f1" d="M214 12l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>',
+    chat: '<rect class="p o" x="70" y="10" width="104" height="140" rx="18"/><path class="wa" d="M70 28a18 18 0 0 1 18-18h68a18 18 0 0 1 18 18v6H70z"/><circle class="wl" cx="86" cy="22" r="6"/><rect class="wl" x="98" y="18" width="40" height="7" rx="3.5"/>' +
+      '<rect class="wab" x="79" y="42" width="86" height="72" rx="9"/><rect class="f1" x="85" y="48" width="74" height="30" rx="6"/><text class="tk b" x="94" y="69">20% OFF</text><rect class="m2" x="85" y="85" width="62" height="5" rx="2.5"/><rect class="m2" x="85" y="95" width="42" height="5" rx="2.5"/><text class="lk" x="85" y="110">View offer</text>' +
+      '<rect class="p o" x="174" y="56" width="58" height="26" rx="13"/><path class="bt" d="M183 69l3 3 6-6M189 72l6-6"/><text x="199" y="73">Read</text><rect class="p o" x="2" y="30" width="72" height="26" rx="13"/><text x="12" y="47">2,400 sent</text>',
+    software: '<rect class="p o" x="20" y="14" width="152" height="100" rx="12"/><path class="o" d="M20 34h152"/><circle class="f2" cx="34" cy="24" r="3.5"/><circle class="f1" cx="46" cy="24" r="3.5"/><circle class="f3" cx="58" cy="24" r="3.5"/>' +
+      [[46, 120, "ink"], [62, 106, "ink"], [78, 78, "f2"], [94, 24, "f1"]].map(r => '<rect class="f3" x="34" y="' + r[0] + '" width="120" height="9" rx="4.5"/><rect class="' + r[2] + '" x="34" y="' + r[0] + '" width="' + r[1] + '" height="9" rx="4.5"/>').join("") +
+      '<circle class="p o" cx="196" cy="64" r="26"/><path class="o" d="M196 50v14l9 6"/><rect class="f1" x="160" y="92" width="72" height="22" rx="11"/><text class="tk" x="170" y="107">Sends 9 am</text>',
+    voice: '<circle class="f1" cx="58" cy="58" r="36"/><path class="ow" transform="translate(40 40) scale(1.5)" d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>' +
+      bars(108, 40, [10, 22, 34, 18, 40, 28, 14, 36, 24, 44, 20, 30, 12, 26, 16], ["f2", "f1"]) +
+      [["1", 108, 1], ["2", 150, 0], ["3", 192, 0]].map(k => '<rect class="' + (k[2] ? "f1" : "p o") + '" x="' + k[1] + '" y="74" width="34" height="30" rx="9"/><text class="' + (k[2] ? "tk " : "") + 'b" x="' + (k[1] + 12) + '" y="95">' + k[0] + '</text>').join(""),
+    video: '<rect class="hb" x="26" y="12" width="156" height="98" rx="12"/><rect class="h2" x="33" y="19" width="142" height="64" rx="8"/><circle class="f1" cx="104" cy="51" r="18"/><path class="ink2" d="M98 41v20l16-10z"/>' +
+      '<rect class="m3" x="38" y="92" width="30" height="9" rx="3"/><rect class="f1" x="72" y="92" width="44" height="9" rx="3"/><rect class="m3" x="120" y="92" width="22" height="9" rx="3"/><rect class="m3" x="146" y="92" width="28" height="9" rx="3"/>' +
+      '<rect class="p o" x="186" y="34" width="44" height="26" rx="13"/><text class="b" x="199" y="52">AI</text><rect class="p o" x="186" y="68" width="48" height="26" rx="13"/><text x="194" y="85">Hindi</text><path class="f1" d="M214 6l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>',
+    growth: '<rect class="p o" x="12" y="12" width="156" height="28" rx="14"/><circle class="o" cx="29" cy="26" r="6"/><path class="o" d="M33.5 30.5l4 4"/><text x="44" y="30">salon near me</text>' +
+      '<rect class="p o" x="56" y="50" width="128" height="62" rx="10"/><path class="f3" d="M68 100l24-12 22 4 24-20 34-12v40H68z"/><path class="ln" d="M68 100l24-12 22 4 24-20 34-12"/><circle class="f2" cx="172" cy="60" r="4.5"/>' +
+      '<path class="f2" d="M206 14a13 13 0 0 1 13 13c0 10-13 24-13 24s-13-14-13-24a13 13 0 0 1 13-13z"/><circle class="p" cx="206" cy="27" r="4.5"/><rect class="p o" x="188" y="78" width="46" height="26" rx="13"/><text class="up" x="197" y="95">+38%</text>',
+    web: '<rect class="p o" x="12" y="14" width="160" height="98" rx="10"/><path class="o" d="M12 30h160"/><circle class="f2" cx="24" cy="22" r="3"/><circle class="f1" cx="34" cy="22" r="3"/><circle class="f3" cx="44" cy="22" r="3"/>' +
+      '<rect class="ink" x="24" y="42" width="62" height="8" rx="4"/><rect class="ink" x="24" y="54" width="46" height="8" rx="4"/><rect class="m" x="24" y="67" width="54" height="5" rx="2.5"/><rect class="f1" x="24" y="78" width="38" height="13" rx="6.5"/>' +
+      '<rect class="f3" x="96" y="40" width="64" height="52" rx="7"/><circle class="f1" cx="142" cy="56" r="8"/><path class="f2" d="M96 92l20-22 14 14 10-8 20 16z"/>' +
+      '<rect class="p o" x="170" y="30" width="56" height="88" rx="11"/><rect class="ink" x="178" y="44" width="30" height="6" rx="3"/><rect class="f3" x="178" y="56" width="40" height="26" rx="5"/><rect class="f1" x="178" y="88" width="26" height="10" rx="5"/>',
+    app: '<rect class="p o" x="12" y="22" width="66" height="82" rx="10"/><path class="f2" d="M12 32a10 10 0 0 1 10-10h46a10 10 0 0 1 10 10v8H12z"/>' +
+      [0, 1, 2, 3].map(r => [0, 1, 2, 3].map(c => '<rect class="' + (r === 1 && c === 2 ? "f1" : "f3") + '" x="' + (20 + c * 13) + '" y="' + (48 + r * 13) + '" width="9" height="9" rx="2"/>').join("")).join("") +
+      '<rect class="p o" x="88" y="12" width="66" height="96" rx="10"/><text class="b" x="100" y="38">₹</text><rect class="m" x="100" y="48" width="42" height="5" rx="2.5"/><rect class="m" x="100" y="60" width="34" height="5" rx="2.5"/><rect class="m" x="100" y="72" width="38" height="5" rx="2.5"/><rect class="ink" x="100" y="88" width="42" height="8" rx="4"/>' +
+      '<rect class="p o" x="164" y="30" width="66" height="76" rx="10"/><rect class="ink" x="176" y="70" width="9" height="24" rx="3"/><rect class="f1" x="190" y="54" width="9" height="40" rx="3"/><rect class="f2" x="204" y="62" width="9" height="32" rx="3"/><rect class="m" x="176" y="42" width="34" height="5" rx="2.5"/>',
+    crm: [0, 1, 2].map(c => '<rect class="p o" x="' + (24 + c * 66) + '" y="16" width="58" height="96" rx="9"/><rect class="' + ["ink", "f1", "f2"][c] + '" x="' + (32 + c * 66) + '" y="24" width="26" height="6" rx="3"/>' + [0, 1, 2].slice(0, 3 - c).map(r => '<rect class="f3" x="' + (32 + c * 66) + '" y="' + (38 + r * 24) + '" width="42" height="18" rx="5"/>').join("")).join(""),
+    star: '<circle class="f1" cx="120" cy="60" r="40"/><path class="ow2" d="M120 36l7 15 16 2-12 11 3 16-14-8-14 8 3-16-12-11 16-2z"/>'
+  };
+  const art = k => '<div class="svc-art" aria-hidden="true"><svg viewBox="0 0 240 120" preserveAspectRatio="xMidYMid meet">' + (ART[k] || ART.star) + '</svg></div>';
 
   /* ---------- header, nav, sections ---------- */
   if (!S.sections.some(x => x.id === "bizcrt")) {
@@ -110,7 +166,7 @@ function vbStart() {
   }
 
   /* ---------- hero slider ---------- */
-  let cur = 0, timer = null;
+  let cur = 0;
   const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   function slideHref(s) {
     if (s.target === "custom link") return safeUrl(s.link);
@@ -121,13 +177,15 @@ function vbStart() {
     const slides = S.slides;
     $("slides").innerHTML = slides.length ? slides.map((s, i) => {
       const href = slideHref(s), ext = /^https?:/.test(href);
-      return '<div class="slide' + (i === 0 ? " on" : "") + '" role="group" aria-roledescription="slide" aria-label="' + (i + 1) + ' of ' + slides.length + '"' + (i === 0 ? "" : ' aria-hidden="true"') + '>' +
+      return '<div class="slide' + (i === 0 ? " on" : "") + '" id="slide' + i + '" role="tabpanel" aria-roledescription="slide" aria-label="' + (i + 1) + ' of ' + slides.length + '"' + (i === 0 ? "" : ' aria-hidden="true"') + '>' +
         '<div class="slide-copy">' + (s.eyebrow ? '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' : '') + (i === 0 ? '<h1>' : '<h2 class="h1">') + esc(s.title) + (i === 0 ? '</h1>' : '</h2>') + '<p>' + esc(s.text) + '</p>' +
-        '<div class="slide-ctas">' + (s.cta ? '<a class="btn btn-accent" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(s.cta) + ' →</a>' : '') +
+        '<div class="slide-ctas">' + (s.cta ? '<a class="btn btn-accent" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(s.cta) + '</a>' : '') +
         (s.cta2 ? '<a class="btn btn-ghost" href="/#services">' + esc(s.cta2) + '</a>' : '') + '</div></div>' +
-        '<div class="slide-visual">' + visual(s.visual, s) + '</div></div>';
+        '<div class="slide-visual" aria-hidden="true">' + visual(s.visual, s) + '</div></div>';
     }).join("") : '<div class="slide on"><div class="slide-copy"><h1>' + esc(st.tagline) + '</h1></div></div>';
-    $("dots").innerHTML = slides.map((s, i) => '<button class="dot' + (i === 0 ? " on" : "") + '" role="tab" aria-selected="' + (i === 0) + '" data-i="' + i + '">' + (i === 0 ? TICK : TICK1) + '<span class="lbl">' + esc(s.eyebrow || ("Slide " + (i + 1))) + '</span></button>').join("");
+    $("dots").innerHTML = slides.map((s, i) => '<button class="dot' + (i === 0 ? " on" : "") + '" role="tab" aria-selected="' + (i === 0) + '" aria-controls="slide' + i + '" data-i="' + i + '"><span class="bar"><i></i></span><span class="lbl">' + esc(s.eyebrow || ("Slide " + (i + 1))) + '</span></button>').join("");
+    $("dots").style.setProperty("--n", slides.length);
+    $("heroCount").textContent = slides.length > 1 ? "1 of " + slides.length : "";
     $("heroFoot").hidden = slides.length < 2;
     $("heroNote").textContent = st.heroNote || "";
   }
@@ -135,12 +193,16 @@ function vbStart() {
     const n = S.slides.length; if (!n) return;
     cur = (i + n) % n;
     document.querySelectorAll(".slide").forEach((el, k) => { el.classList.toggle("on", k === cur); k === cur ? el.removeAttribute("aria-hidden") : el.setAttribute("aria-hidden", "true"); });
-    document.querySelectorAll(".dot").forEach((el, k) => { el.classList.toggle("on", k === cur); el.setAttribute("aria-selected", k === cur); el.firstElementChild.outerHTML = k === cur ? TICK : TICK1; });
+    document.querySelectorAll(".dot").forEach((el, k) => { el.classList.toggle("on", k === cur); el.setAttribute("aria-selected", k === cur); });
+    $("heroCount").textContent = (cur + 1) + " of " + n;
     const on = document.querySelector(".slide.on");
     if (on) on.querySelectorAll(".bub.pop").forEach(b => { b.style.animation = "none"; void b.offsetWidth; b.style.animation = ""; });
   }
-  const startAuto = () => { stopAuto(); if (!reduce && S.slides.length > 1) timer = setInterval(() => go(cur + 1), 6500); };
-  const stopAuto = () => { if (timer) clearInterval(timer); timer = null; };
+  // The progress line under the active tab is the timer: when its fill animation ends, the next slide shows.
+  // Hover, focus or another page pauses the fill; with reduced motion there is no fill, so no auto-advance.
+  const heroEl = document.querySelector(".hero");
+  const startAuto = () => { if (heroEl) heroEl.classList.remove("paused"); };
+  const stopAuto = () => { if (heroEl) heroEl.classList.add("paused"); };
 
   /* ---------- sections ---------- */
   function renderSections() {
@@ -148,15 +210,17 @@ function vbStart() {
     $("stats").innerHTML = stats.map(p => '<div class="stat"><b>' + esc(p[0].trim()) + '</b><span>' + esc((p[1] || "").trim()) + '</span></div>').join("");
 
     $("workGrid").innerHTML = (S.work || []).map(w => '<article class="work-card">' +
-      '<div class="wc-media">' + (w.image ? '<img src="' + esc(w.image) + '" alt="' + esc(w.title) + '" loading="lazy">' : '<span class="wc-ph">' + esc((w.service || w.title || "").split(/[ +,]/)[0]) + '</span>') + (w.result ? '<b class="wc-result">' + esc(w.result) + '</b>' : '') + '</div>' +
+      (w.image ? '<div class="wc-media"><img src="' + esc(w.image) + '" alt="' + esc(w.title) + '" loading="lazy">' + (w.result ? '<b class="wc-result">' + esc(w.result) + '</b>' : '') + '</div>'
+        : '<div class="wc-media wc-type"><span class="wc-k">Result</span><b class="wc-big">' + esc(w.result || w.service || w.title) + '</b></div>') +
       '<div class="wc-body">' + (w.client ? '<div class="eyebrow">' + esc(w.client) + '</div>' : '') + '<h3>' + esc(w.title) + '</h3>' + (w.service ? '<p class="wc-svc">' + esc(w.service) + '</p>' : '') + (w.summary ? '<p>' + esc(w.summary) + '</p>' : '') +
-      (w.link ? '<a class="wc-link" href="' + esc(safeUrl(w.link)) + '" target="_blank" rel="noopener">See the work →</a>' : '') + '</div></article>').join("");
+      (w.link ? '<a class="wc-link" href="' + esc(safeUrl(w.link)) + '" target="_blank" rel="noopener">See the work</a>' : '') + '</div></article>').join("");
+    const plainSvc = S.services.filter(v => !v.featured), lone = plainSvc.length % 3 === 1 ? plainSvc[plainSvc.length - 1] : null, halves = plainSvc.length % 3 === 2 ? plainSvc.slice(-2) : [];
     $("svcGrid").innerHTML = S.services.map(v => {
       const pts = lines(v.points).map(p => '<li>' + TICK + '<span>' + esc(p) + '</span></li>').join("");
-      const body = '<div class="svc-ic">' + (ICONS[v.icon] || ICONS.star) + '</div><div class="tag">' + esc(v.tag) + '</div><h3>' + esc(v.name) + '</h3><p>' + esc(v.summary) + '</p><ul>' + pts + '</ul>';
+      const body = (v.featured ? '<div class="svc-ic">' + (ICONS[v.icon] || ICONS.star) + '</div>' : art(v.icon)) + '<h3>' + esc(v.name) + '</h3><div class="tag">' + esc(v.tag || "") + '</div><p>' + esc(v.summary) + '</p><ul>' + pts + '</ul>';
       return v.featured
-        ? '<article class="svc featured"><div class="svc-body">' + body + (v.cta ? '<div><a class="btn btn-accent btn-small" href="/#contact" data-service="' + esc(v.name) + '">' + esc(v.cta) + ' →</a></div>' : '') + '</div>' + visual(({ web: "website", crm: "crm", app: "growth", bot: "chat", star: "software" })[v.icon] || v.icon, v) + '</article>'
-        : '<article class="svc">' + body + '</article>';
+        ? '<article class="svc featured"><div class="svc-body">' + body + (v.cta ? '<div><a class="btn btn-accent btn-small" href="/#contact" data-service="' + esc(v.name) + '">' + esc(v.cta) + '</a></div>' : '') + '</div>' + visual(visKind(v.icon), v) + '</article>'
+        : '<article class="svc' + (v === lone ? " wide" : halves.includes(v) ? " half" : "") + '">' + body + '</article>';
     }).join("");
 
     $("steps").innerHTML = S.steps.map(p => '<div class="step"><div class="stage">' + TICK + esc(p.stage) + '</div><h3>' + esc(p.title) + '</h3><p>' + esc(p.text) + '</p></div>').join("");
@@ -165,7 +229,7 @@ function vbStart() {
     $("quotes").innerHTML = S.testimonials.map(t => {
       const ini = (t.name || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
       const stars = t.rating ? '<div class="stars" aria-label="' + esc(t.rating) + ' out of 5 stars">' + "★".repeat(+t.rating) + "☆".repeat(5 - t.rating) + '</div>' : '';
-      return '<figure class="quote" style="margin:0">' + (t.sample ? '<span class="sample-chip">Sample · replace with a real review</span>' : '') + stars +
+      return '<figure class="quote" style="margin:0">' + (t.sample ? '<span class="sample-chip">Sample: replace with a real review</span>' : '') + stars +
         '<blockquote>“' + esc(t.quote) + '”</blockquote><footer>' + (t.photo ? '<img class="quote-photo" src="' + esc(t.photo) + '" alt="" loading="lazy">' : '<span class="av">' + esc(ini) + '</span>') +
         '<div><b>' + esc(t.name) + '</b><span>' + esc(t.role) + '</span></div></footer></figure>';
     }).join("");
@@ -192,14 +256,14 @@ function vbStart() {
     $("fSubmit").textContent = st.contactButton || "Send my enquiry";
 
     const social = lines(st.social).map(l => l.split("|")).filter(p => p[1]);
-    $("foot").innerHTML = '<div class="foot-brand">' + (st.logo ? '<img src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" loading="lazy">' : '<b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b>') + (st.logoSub ? '<span class="foot-motto">' + esc(st.logoSub) + '</span>' : '') + '<span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
+    $("foot").innerHTML = '<div class="foot-brand">' + (st.logo ? '<img src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" loading="lazy">' : '<b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b>') + (st.logoSub && !st.logo ? '<span class="foot-motto">' + esc(st.logoSub) + '</span>' : '') + '<span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
       '<div style="display:grid;gap:12px;justify-items:end"><nav aria-label="Footer">' + S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(secLink).join("") + (sectionById.contact && sectionById.contact.visible ? '<a href="/#contact" data-sec="contact">Contact</a>' : '') + '</nav>' +
       (social.length ? '<div class="social">' + social.map(p => '<a href="' + esc(safeUrl(p[1].trim())) + '" target="_blank" rel="noopener">' + esc(p[0].trim()) + '</a>').join("") + '</div>' : '') + '</div>';
   }
   function setStepCols() { $("steps").style.gridTemplateColumns = window.innerWidth > 860 && S.steps.length ? "repeat(" + S.steps.length + ",1fr)" : ""; }
   function cover(p) {
     if (p.cover) return '<div class="post-cover"><img src="' + esc(p.cover) + '" alt="" loading="lazy"></div>';
-    return '<div class="post-cover"><span class="glyph">' + (ICONS[p.visual] || ICONS.star).replace("<svg ", '<svg style="width:54px;height:54px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round" ') + TICK + '</span></div>';
+    return '<div class="post-cover gen" data-v="' + esc(p.visual || "star") + '"><span class="pcv-cat">' + esc(p.category || "Guide") + '</span><span class="pcv-ic" aria-hidden="true">' + (ICONS[p.visual] || ICONS.star) + '</span></div>';
   }
   function fmtDate(d) { if (!d) return ""; const x = new Date(d + "T00:00:00"); return isNaN(x) ? esc(d) : x.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); }
   function inline(t) {
@@ -226,7 +290,7 @@ function vbStart() {
     if (!p) return false;
     $("article").innerHTML = '<a class="btn btn-ghost btn-small back" href="/#blog" data-sec="blog">← All posts</a><div class="meta-line"><span>' + esc(p.category) + '</span><span>' + fmtDate(p.date) + '</span><span>' + esc(p.readTime) + ' read</span></div><h1>' + esc(p.title) + '</h1><p class="lede">' + esc(p.excerpt) + '</p>' + (p.author ? '<p class="by">By ' + esc(p.author) + '</p>' : '') +
       '<div class="article-cover">' + cover(p) + '</div><div class="article-body">' + mdLite(p.body) + '</div>' +
-      '<div class="contact" style="margin-top:24px;grid-template-columns:1fr;padding:32px"><h2 style="font-size:28px">Want this set up for your business?</h2><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-accent" href="/#contact" data-sec="contact">Talk to us →</a>' + (st.whatsapp ? '<a class="btn btn-ghost" href="' + esc(waLink("Hi, I just read \"" + p.title + "\" and want to know more.")) + '" target="_blank" rel="noopener">Chat on WhatsApp</a>' : '') + '</div></div>';
+      '<div class="contact" style="margin-top:24px;grid-template-columns:1fr;padding:32px"><h2 style="font-size:28px">Want this set up for your business?</h2><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn btn-accent" href="/#contact" data-sec="contact">Talk to us</a>' + (st.whatsapp ? '<a class="btn btn-ghost" href="' + esc(waLink("Hi, I just read \"" + p.title + "\" and want to know more.")) + '" target="_blank" rel="noopener">Chat on WhatsApp</a>' : '') + '</div></div>';
     showOnly("articleView");
     document.title = p.title + " | " + st.brand;
     if (push) history.pushState({ post: slug }, "", "/blog/" + slug);
@@ -273,7 +337,7 @@ function vbStart() {
         await saveLead(data);
         const text = "Hi " + st.brand + ", I'm " + data.name + (data.business ? " from " + data.business : "") + (data.business_type ? " (" + data.business_type + ")" : "") + (data.city ? ", " + data.city : "") + ". I'm interested in " + data.service + "." + (data.message ? "\n\n" + data.message : "");
         const wl = waLink(text);
-        out.innerHTML = '<div class="ok"><p>' + esc(opts.success || st.contactSuccess || "Thanks! We'll be in touch soon.") + '</p>' + (wl ? '<div><a class="btn btn-accent btn-small" href="' + esc(wl) + '" target="_blank" rel="noopener">Also message us on WhatsApp →</a></div>' : '') + '</div>';
+        out.innerHTML = '<div class="ok"><p>' + esc(opts.success || st.contactSuccess || "Thanks! We'll be in touch soon.") + '</p>' + (wl ? '<div><a class="btn btn-accent btn-small" href="' + esc(wl) + '" target="_blank" rel="noopener">Also message us on WhatsApp</a></div>' : '') + '</div>';
         form.reset();
       } catch (err) {
         out.innerHTML = '<p class="err">' + esc(err.message) + ' Please try again' + (st.whatsapp ? ' or message us on WhatsApp.' : '.') + '</p>';
@@ -305,13 +369,13 @@ function vbStart() {
     const bar = $("offerBar");
     if (live.length) {
       const o = live.slice().sort((a, b) => (a.endDate || "9999").localeCompare(b.endDate || "9999"))[0];
-      bar.innerHTML = '<div class="wrap offer-bar-row"><span class="ob-ic" aria-hidden="true">' + (FEST[o.festival] || "✨") + '</span><span class="ob-text"><b>' + esc(o.barText || o.title) + '</b>' + (o.discount ? ' · ' + esc(o.discount) : '') + (o.endDate ? '<span class="ob-end"> · ' + esc(countdown(o)) + '</span>' : '') + '</span><a class="ob-link" href="/offer/' + esc(o.slug) + '" data-offer="' + esc(o.slug) + '">View offer →</a></div>';
+      bar.innerHTML = '<div class="wrap offer-bar-row"><span class="ob-ic" aria-hidden="true">' + (FEST[o.festival] || "✨") + '</span><span class="ob-text"><b>' + esc(o.barText || o.title) + '</b>' + (o.discount ? '<span class="ob-disc">' + esc(o.discount) + '</span>' : '') + (o.endDate ? '<span class="ob-end">' + esc(countdown(o)) + '</span>' : '') + '</span><a class="ob-link" href="/offer/' + esc(o.slug) + '" data-offer="' + esc(o.slug) + '">View offer</a></div>';
       bar.dataset.fest = o.festival; bar.hidden = false;
     } else bar.hidden = true;
     const strip = $("offers");
     if (live.length) {
       strip.innerHTML = '<div class="sec-head"><div><div class="eyebrow">Festival offers</div><h2>Offers running now</h2></div><p>Limited-time packages for the festive season. Tap an offer to see what is included and enquire.</p></div><div class="offer-cards">' +
-        live.map(o => '<a class="offer-card" data-fest="' + esc(o.festival) + '" href="/offer/' + esc(o.slug) + '" data-offer="' + esc(o.slug) + '"><span class="oc-badge">' + (FEST[o.festival] || "✨") + ' ' + esc(o.badge || "Festival offer") + '</span><h3>' + esc(o.title) + '</h3>' + (o.discount ? '<b class="oc-disc">' + esc(o.discount) + '</b>' : '') + '<p>' + esc(o.subtitle) + '</p><span class="oc-foot"><span>' + esc(o.endDate ? "Valid till " + fmtDate(o.endDate) : "Limited period") + '</span><span class="oc-go">View offer →</span></span></a>').join("") + '</div>';
+        live.map(o => '<a class="offer-card" data-fest="' + esc(o.festival) + '" href="/offer/' + esc(o.slug) + '" data-offer="' + esc(o.slug) + '"><span class="oc-badge">' + (FEST[o.festival] || "✨") + ' ' + esc(o.badge || "Festival offer") + '</span><h3>' + esc(o.title) + '</h3>' + (o.discount ? '<b class="oc-disc">' + esc(o.discount) + '</b>' : '') + '<p>' + esc(o.subtitle) + '</p><span class="oc-foot"><span>' + esc(o.endDate ? "Valid till " + fmtDate(o.endDate) : "Limited period") + '</span><span class="oc-go">View offer</span></span></a>').join("") + '</div>';
       strip.hidden = false;
     } else strip.hidden = true;
   }
@@ -330,7 +394,7 @@ function vbStart() {
         '<h1>' + esc(o.headline || o.title) + '</h1>' + (o.subtitle ? '<p class="offer-sub">' + esc(o.subtitle) + '</p>' : '') +
         (state === "ended" ? '<div class="offer-note">This offer has ended. Ask us about our current offers.</div>' : state === "upcoming" ? '<div class="offer-note">This offer starts on ' + esc(fmtDate(o.startDate)) + '.</div>' : '') +
         '<div class="offer-meta">' + (o.endDate ? '<span>Valid till <b>' + esc(fmtDate(o.endDate)) + '</b></span>' : '') + (state === "live" && o.endDate ? '<span class="offer-count" id="offerCount">' + esc(countdown(o)) + '</span>' : '') + '</div>' +
-        '<div class="offer-ctas"><a class="btn btn-accent" href="#offerForm" data-jump="offerForm">' + esc(o.ctaLabel || "Claim this offer") + ' →</a>' +
+        '<div class="offer-ctas"><a class="btn btn-accent" href="#offerForm" data-jump="offerForm">' + esc(o.ctaLabel || "Claim this offer") + '</a>' +
           (callNum ? '<a class="btn btn-ghost" href="tel:' + esc(callNum) + '">Call now</a>' : '') +
           (wa ? '<a class="btn btn-ghost" href="' + esc(wa) + '" target="_blank" rel="noopener">WhatsApp us</a>' : '') + '</div>' +
         (callNum ? '<p class="offer-callline">Or call <b class="sel">' + esc(st.phone) + '</b></p>' : '') +
@@ -431,16 +495,16 @@ function vbStart() {
   }
   const inrP = p => inr(p / 100);
   const storeReady = PRODUCTS.length ? fetch(window.VB_SUPABASE.url + "/functions/v1/store/status").then(r => r.json()).then(j => { STORE.on = !!j.store; STORE.gst = j.gst_note || ""; STORE.test = !!j.test; STORE.tax = j.gst || null; return STORE; }).catch(() => { STORE.on = false; return STORE; }) : Promise.resolve(STORE);
-  function prodIcon(x) { return x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<span class="pc-ic">' + (ICONS[x.icon] || ICONS.software || "") + '</span>'; }
+  function prodIcon(x) { return x.image ? '<img src="' + esc(x.image) + '" alt="" loading="lazy">' : '<div class="pc-shot" aria-hidden="true">' + visual(visKind(x.icon), x) + '</div>'; }
   function renderStore() {
     const g = $("prodGrid"); if (!g) return;
     g.innerHTML = PRODUCTS.map(x => {
       const feats = lines(x.features).slice(0, 4);
       return '<article class="prod-card">' + (x.badge ? '<span class="pc-badge">' + esc(x.badge) + '</span>' : '') +
         '<div class="pc-media">' + prodIcon(x) + '</div>' +
-        (x.category ? '<div class="eyebrow">' + esc(x.category) + '</div>' : '') + '<h3>' + esc(x.name) + '</h3><p>' + esc(x.tagline || x.summary) + '</p>' +
-        (feats.length ? '<ul>' + feats.map(f => '<li>' + TICK1 + '<span>' + esc(f) + '</span></li>').join("") + '</ul>' : '') +
-        '<div class="pc-foot"><span class="pc-price">' + esc(fromPrice(x)) + '</span><a class="btn btn-accent btn-small" href="/product/' + esc(x.slug) + '" data-product="' + esc(x.slug) + '">View plans →</a></div></article>';
+        '<div class="eyebrow">' + esc(x.category || "") + '</div><h3>' + esc(x.name) + '</h3><p>' + esc(x.tagline || x.summary) + '</p>' +
+        '<ul>' + feats.map(f => '<li>' + TICK1 + '<span>' + esc(f) + '</span></li>').join("") + '</ul>' +
+        '<div class="pc-foot"><span class="pc-price">' + esc(fromPrice(x)) + '</span><a class="btn btn-accent btn-small" href="/product/' + esc(x.slug) + '" data-product="' + esc(x.slug) + '">View plans</a></div></article>';
     }).join("");
   }
   function showProduct(slug, push) {
@@ -453,10 +517,10 @@ function vbStart() {
         '<a class="back-link" href="/#store" data-sec="store">← All software</a>' +
         (x.category ? '<div class="eyebrow">' + esc(x.category) + '</div>' : '') + '<h1>' + esc(x.name) + '</h1>' +
         (x.tagline ? '<p class="prod-tag">' + esc(x.tagline) + '</p>' : '') + (x.summary ? '<p>' + esc(x.summary) + '</p>' : '') +
-        '<div class="offer-ctas">' + (plans.length ? '<a class="btn btn-accent" href="#plans" data-jump="plans">See plans and prices →</a>' : '') +
+        '<div class="offer-ctas">' + (plans.length ? '<a class="btn btn-accent" href="#plans" data-jump="plans">See plans and prices</a>' : '') +
         (x.demo ? '<a class="btn btn-ghost" href="/#contact" data-sec="contact" data-service="' + esc("Product: " + x.name) + '">Book a free demo</a>' : '') + '</div>' +
         (plans.length ? '<p class="prod-from">' + esc(fromPrice(x)) + '</p>' : '') +
-      '</div><div class="prod-visual">' + (x.image ? '<img src="' + esc(x.image) + '" alt="' + esc(x.name) + '">' : '<div class="prod-tile">' + (ICONS[x.icon] || ICONS.software || "") + '<b>' + esc(x.name) + '</b></div>') + '</div></div></section>' +
+      '</div><div class="prod-visual">' + (x.image ? '<img src="' + esc(x.image) + '" alt="' + esc(x.name) + '">' : visual(visKind(x.icon), x)) + '</div></div></section>' +
       '<div class="wrap prod-body">' +
         (plans.length ? '<section id="plans" class="plans-wrap"><div class="sec-head"><div><div class="eyebrow">Pricing</div><h2>Choose your plan</h2></div><p>Pay securely with UPI, cards or netbanking. You get a receipt by email straight away.</p></div>' +
           '<div class="plans" style="--n:' + Math.min(plans.length, 3) + '">' + plans.map((p, i) => '<div class="plan' + (i === popular ? " hot" : "") + '">' + (i === popular ? '<span class="plan-flag">Most popular</span>' : '') +
@@ -465,7 +529,7 @@ function vbStart() {
             (p.note ? '<p class="plan-note">' + esc(p.note) + '</p>' : '') +
             '<button type="button" class="btn ' + (i === popular || plans.length === 1 ? "btn-accent" : "btn-ghost-dark") + ' plan-buy" data-buy="' + i + '">' + esc(x.buyLabel || "Buy now") + '</button>' +
             (p.billing !== "one-time" ? '<small class="plan-renew">Renews ' + (p.billing === "monthly" ? "monthly" : "yearly") + ' until you cancel</small>' : '<small class="plan-renew">Pay once</small>') + '</div>').join("") + '</div>' +
-          '<p class="pay-note" id="payNote"><span class="lock" aria-hidden="true">🔒</span> Secure payments by Razorpay · UPI · Cards · Netbanking · Wallets</p></section>' : '') +
+          '<p class="pay-note" id="payNote"><span class="lock" aria-hidden="true">🔒</span> Secure payments by Razorpay: UPI, cards, netbanking and wallets</p></section>' : '') +
         (feats.length ? '<section class="prod-feats"><h2>What you get</h2><ul class="offer-points">' + feats.map(f => '<li>' + TICK + '<span>' + esc(f) + '</span></li>').join("") + '</ul></section>' : '') +
         (x.details ? '<div class="article-body offer-details">' + mdLite(x.details) + '</div>' : '') +
         '<div class="offer-about"><h2>Have questions before you buy?</h2><p>Talk to our team and we\'ll help you pick the right plan.</p><div class="offer-links">' +
@@ -620,7 +684,7 @@ function vbStart() {
       const head = i === 0 || !prev.length ? '' : '<p class="bz-inc">Everything in ' + esc(P[i - 1].name) + ', plus:</p>';
       prev = feats;
       const pr = priceOf(p), save = period === "year" && p.price_month_paise ? Math.round(100 - p.price_year_paise / (p.price_month_paise * 12) * 100) : 0;
-      return '<div class="plan bz-plan' + (p.highlight ? " hot" : "") + '">' + (p.highlight ? '<span class="plan-flag">Most popular · free trial</span>' : '') +
+      return '<div class="plan bz-plan' + (p.highlight ? " hot" : "") + '">' + (p.highlight ? '<span class="plan-flag">Most popular</span>' : '') +
         '<h3>' + esc(p.name) + '</h3><p class="bz-pdesc">' + esc(planBlurb(p)) + '</p>' +
         '<div class="plan-price"><b>' + (p.is_free ? "₹0" : rp(pr)) + '</b><span>' + (p.is_free ? "forever" : period === "year" ? "per year" : period === "life" ? "one-time" : "per month") + '</span></div>' +
         (save > 0 ? '<p class="plan-setup bz-save">Save ' + save + '% vs monthly</p>' : '<p class="plan-setup">&nbsp;</p>') +
@@ -638,7 +702,7 @@ function vbStart() {
         '<a class="back-link" href="/" data-sec="top">← ' + esc(st.brand) + '</a>' +
         '<div class="bz-brand">' + (BZ.logo ? '<img src="' + esc(BZ.logo) + '" alt="' + esc(bzName()) + '" height="40">' : '<span class="bz-mark">' + esc(bzName().slice(0, 2)) + '</span><b>' + esc(bzName()) + '</b>') + '<span class="bz-by">by ' + esc(st.brand) + '</span></div>' +
         '<h1>' + esc(BZ.headline || BZ.tagline) + '</h1><p class="bz-lede">' + esc(BZ.intro) + '</p>' +
-        '<div class="offer-ctas"><a class="btn btn-accent" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="hero">' + esc(BZ.ctaLabel || "Start free trial") + ' →</a><a class="btn btn-ghost" href="#bzDemo" data-jump="bzDemo">' + esc(BZ.demoLabel || "Book a free demo") + '</a></div>' +
+        '<div class="offer-ctas"><a class="btn btn-accent" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="hero">' + esc(BZ.ctaLabel || "Start free trial") + '</a><a class="btn btn-ghost" href="#bzDemo" data-jump="bzDemo">' + esc(BZ.demoLabel || "Book a free demo") + '</a></div>' +
         (BZ.trialNote ? '<p class="bz-note">' + esc(BZ.trialNote) + '</p>' : '') +
         (BZ.loginUrl ? '<a class="bz-login" href="' + esc(safeUrl(BZ.loginUrl)) + '" target="_blank" rel="noopener">' + esc(BZ.loginLabel || "Log in") + ' ↗</a>' : '') +
       '</div><div class="bz-visual">' + (BZ.screenshot ? '<img src="' + esc(BZ.screenshot) + '" alt="' + esc(bzName()) + ' app">' : appMock()) + '</div></div>' +
@@ -685,8 +749,8 @@ function vbStart() {
     el.innerHTML = '<div class="bz-spot"><div class="bz-spot-copy"><div class="bz-brand">' + (BZ.logo ? '<img src="' + esc(BZ.logo) + '" alt="' + esc(bzName()) + '" height="34">' : '<span class="bz-mark">' + esc(bzName().slice(0, 2)) + '</span><b>' + esc(bzName()) + '</b>') + '<span class="bz-by">Our product</span></div>' +
       '<h2>' + esc(BZ.homeHeading || BZ.tagline) + '</h2><p>' + esc(BZ.homeText || BZ.intro) + '</p>' +
       '<div class="bz-chips">' + mods.map(m => '<span>' + (BZ_IC[m.key] || BZ_IC.core) + esc(m.name_en || m.name) + '</span>').join("") + '</div>' +
-      '<div class="offer-ctas"><a class="btn btn-accent" href="/bizcrt" data-biz="1">Explore ' + esc(bzName()) + ' →</a><a class="btn btn-ghost" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="home">' + esc(BZ.ctaLabel || "Start free trial") + '</a></div>' +
-      '<p class="bz-note">' + (from ? 'Free plan available · paid plans from ' + rp(from) + '/month' : esc(BZ.trialNote || "")) + '</p></div>' +
+      '<div class="offer-ctas"><a class="btn btn-accent" href="/bizcrt" data-biz="1">Explore ' + esc(bzName()) + '</a><a class="btn btn-ghost" href="' + esc(safeUrl(BZ.ctaUrl || "#")) + '" target="_blank" rel="noopener" data-bzcta="home">' + esc(BZ.ctaLabel || "Start free trial") + '</a></div>' +
+      '<p class="bz-note">' + (from ? 'Free plan available. Paid plans from ' + rp(from) + '/month' : esc(BZ.trialNote || "")) + '</p></div>' +
       '<div class="bz-spot-visual">' + (BZ.screenshot ? '<img src="' + esc(BZ.screenshot) + '" alt="' + esc(bzName()) + ' app" loading="lazy">' : appMock()) + '</div></div>';
   }
 
@@ -710,16 +774,21 @@ function vbStart() {
     }
   });
   $("menuBtn").addEventListener("click", () => { const o = $("nav").classList.toggle("open"); $("menuBtn").setAttribute("aria-expanded", o); });
-  $("dots").addEventListener("click", e => { const d = e.target.closest(".dot"); if (d) { go(+d.dataset.i); startAuto(); } });
-  $("prev").addEventListener("click", () => { go(cur - 1); startAuto(); });
-  $("next").addEventListener("click", () => { go(cur + 1); startAuto(); });
-  const hero = document.querySelector(".hero");
-  hero.addEventListener("mouseenter", stopAuto); hero.addEventListener("mouseleave", startAuto);
-  hero.addEventListener("focusin", stopAuto);
+  $("dots").addEventListener("click", e => { const d = e.target.closest(".dot"); if (d) go(+d.dataset.i); });
+  $("dots").addEventListener("animationend", e => { if (e.target.closest(".dot.on") && S.slides.length > 1) go(cur + 1); });
+  $("prev").addEventListener("click", () => go(cur - 1));
+  $("next").addEventListener("click", () => go(cur + 1));
+  const hero = heroEl;
+  // pause for a mouse resting on the hero or keyboard focus inside it; taps on phones don't pause it
+  let kbFocus = false, mouseIn = false;
+  hero.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") { mouseIn = true; stopAuto(); } });
+  hero.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") { mouseIn = false; if (!kbFocus) startAuto(); } });
+  hero.addEventListener("focusin", e => { if (e.target.matches(":focus-visible")) { kbFocus = true; stopAuto(); } });
+  hero.addEventListener("focusout", e => { if (!hero.contains(e.relatedTarget)) { kbFocus = false; if (!mouseIn) startAuto(); } });
   hero.addEventListener("keydown", e => { if (e.key === "ArrowLeft") go(cur - 1); if (e.key === "ArrowRight") go(cur + 1); });
   let sx = null;
   hero.addEventListener("pointerdown", e => { sx = e.clientX; });
-  hero.addEventListener("pointerup", e => { if (sx != null && Math.abs(e.clientX - sx) > 50) { go(cur + (e.clientX < sx ? 1 : -1)); startAuto(); } sx = null; });
+  hero.addEventListener("pointerup", e => { if (sx != null && Math.abs(e.clientX - sx) > 50) go(cur + (e.clientX < sx ? 1 : -1)); sx = null; });
   $("qPrev").addEventListener("click", () => $("quotes").scrollBy({ left: -$("quotes").clientWidth * .8, behavior: "smooth" }));
   $("qNext").addEventListener("click", () => $("quotes").scrollBy({ left: $("quotes").clientWidth * .8, behavior: "smooth" }));
   window.addEventListener("resize", setStepCols);
@@ -731,7 +800,9 @@ function vbStart() {
   else if (window.__BIZ__ && showBiz(false)) { /* BizCRT page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
-  document.documentElement.classList.remove("vb-boot");
+  // show the page once the brand fonts are in (capped), so headlines don't reflow or flash in a fallback face
+  const reveal = () => document.documentElement.classList.remove("vb-boot");
+  if (document.fonts && document.fonts.status !== "loaded") Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 700))]).then(reveal); else reveal();
 }
 
 if (window.__SITE__) vbStart();
