@@ -270,6 +270,9 @@
       case "PUT store-settings": return await rpc("save_store_settings", { p: body });
       case "GET mail-log": return (await rpc("mail_log", { p_limit: 30 })) || [];
       case "POST test-mail": return await req("/functions/v1/store/test-mail", { method: "POST", body: { to: body.to } });
+      case "POST pay-link": return await req("/functions/v1/store/pay-link", { method: "POST", body });
+      case "POST pay-link-cancel": return await req("/functions/v1/store/pay-link/cancel", { method: "POST", body: { order_no: body.orderNo } });
+      case "GET store-status": return await req("/functions/v1/store/status", { auth: false });
       case "GET automation": return (await rpc("get_automation", {})) || {};
       case "PUT automation": return await rpc("save_automation", { p: body });
       case "POST automation-sample": return { requestId: await rpc("send_automation_sample", { p_kind: body.kind, p_phone: body.phone }) };

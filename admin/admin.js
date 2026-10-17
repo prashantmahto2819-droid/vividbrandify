@@ -420,7 +420,8 @@
     orders.forEach(o => {
       if (skip.has("o" + o.id)) return;
       const age = Date.now() - Date.parse(o.created_at);
-      if (o.status === "created" && age > 30 * 6e4 && age < 7 * 864e5 && o.phone) money.push({ o, kind: "unpaid", why: "Checkout not finished · " + ago(o.created_at) });
+      if (o.status === "created" && isLink(o)) { if (o.phone && !linkExpired(o) && age > 864e5) money.push({ o, kind: "link", why: "Link not paid · sent " + ago(o.created_at) }); }
+      else if (o.status === "created" && age > 30 * 6e4 && age < 7 * 864e5 && o.phone) money.push({ o, kind: "unpaid", why: "Checkout not finished · " + ago(o.created_at) });
       else if (o.status === "halted") money.push({ o, kind: "halted", why: "Renewal payment failed" });
       else if (o.status === "active" && o.next_charge_at && Date.parse(o.next_charge_at) < week) money.push({ o, kind: "renewal", why: "Renews " + dayName(String(o.next_charge_at).slice(0, 10)) });
     });
@@ -437,6 +438,7 @@
       unpaid: "Hi " + n + ", this is " + brand + ". Your order for " + what + " wasn't completed. Can I help you finish it, or answer any questions?",
       halted: "Hi " + n + ", this is " + brand + ". The renewal payment for " + what + " didn't go through. Could you check your card or UPI? We're happy to help.",
       renewal: "Hi " + n + ", a quick reminder from " + brand + ": your " + what + " plan renews on " + extra + ". Reply here if you need any changes.",
+      link: "Hi " + n + ", a gentle reminder from " + brand + " about the payment for " + what + ". Here is the link again: " + extra,
     };
     return T[kind];
   }
@@ -473,9 +475,9 @@
           x.reply.map(l => { const w = waitInfo(l), old = w.m >= 2880; return tRow(l, old ? "No reply for " + w.txt.replace("d", " days") : w.m < 1 ? "Just now" : "Waiting " + w.txt, old ? "warn" : w.late ? "bad" : "warn", "reply", '<button class="btn btn-s btn-sm" data-treplied="' + l.id + '">Replied</button>'); })) +
         tGroup("follow", "Follow-ups", "Calls and messages you planned for today or earlier.", x.follow,
           x.follow.map(l => { const late = l.followUpOn < t, d = Math.round((Date.parse(t) - Date.parse(l.followUpOn)) / 864e5); return tRow(l, late ? (d === 1 ? "1 day overdue" : d + " days overdue") : "Today", late ? "bad" : "ok", "follow", '<button class="btn btn-p btn-sm" data-tdone="' + l.id + '">Done</button>' + snoozeBtns(l.id)); })) +
-        tGroup("money", "Payments", "Unfinished checkouts, failed renewals and plans renewing this week.", x.money,
+        tGroup("money", "Payments", "Unpaid links and checkouts, failed renewals and plans renewing this week.", x.money,
           x.money.map(m => { const o = m.o; return '<li class="t-row" data-torow="' + o.id + '"><span class="t-av t-av-o">₹</span><div class="t-main"><b class="t-name">' + esc(o.customer_name) + '</b><span class="t-chip ' + (m.kind === "renewal" ? "ok" : m.kind === "halted" ? "bad" : "warn") + '">' + esc(m.why) + '</span><span class="t-val">' + inr(o.total_amount || o.price) + '</span><p>' + esc([o.product_name + (o.plan_name ? " – " + o.plan_name : ""), o.business, o.order_no].filter(Boolean).join(" · ")) + '</p></div>' +
-            '<div class="t-acts">' + tAct(o.id, o.phone, m.kind, o.customer_name, o.product_name, m.kind === "renewal" ? dayName(String(o.next_charge_at).slice(0, 10)) : "", "") + '<button class="btn btn-s btn-sm" data-tskip="o' + o.id + '">Done for today</button></div></li>'; })) +
+            '<div class="t-acts">' + tAct(o.id, o.phone, m.kind, o.customer_name, o.product_name, m.kind === "renewal" ? dayName(String(o.next_charge_at).slice(0, 10)) : m.kind === "link" ? o.pay_link_url : "", "") + '<button class="btn btn-s btn-sm" data-tskip="o' + o.id + '">Done for today</button></div></li>'; })) +
         tGroup("quiet", "Deals going quiet", "Qualified deals with no follow-up planned for 4 days or more, biggest first.", x.quiet,
           x.quiet.map(l => tRow(l, STAGE_LABEL[l.stage] + " · quiet " + l.quietDays + " days", "warn", "quiet", '<button class="btn btn-s btn-sm" data-tsnooze="' + l.id + '" data-days="1">Follow up tomorrow</button><button class="btn btn-g btn-sm" data-tskip="q' + l.id + '">Skip</button>'))) +
         (total ? '' : '<div class="card t-clear"><span aria-hidden="true">✓</span><h2>All clear</h2><p class="help">No replies, follow-ups or payments are waiting. Plan the next few days from the list on the right.</p></div>') +
@@ -530,6 +532,94 @@
     if (!staff && !S.autoCfg) api("GET", "automation").then(a => { S.autoCfg = a || {}; const el = document.getElementById("autoCard"); if (el && S.view === "dashboard") el.outerHTML = autoCard(); }).catch(() => { const el = document.getElementById("autoCard"); if (el) el.querySelector(".help").textContent = "Couldn't load automation settings."; });
   }
 
+
+  /* ---------- payment links: collect any amount (advances, custom work) with a GST invoice ---------- */
+  const STATES = { "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat", "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra", "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other Territory" };
+  const isLink = o => o.product_slug === "payment-link";
+  const linkExpired = o => o.pay_link_expires_at && Date.parse(o.pay_link_expires_at) < Date.now();
+  function linkWaText(name, desc, total, url, expires) {
+    const brand = (S.content.settings || {}).brand || "us";
+    return "Hi " + firstName(name) + ", here is the secure payment link from " + brand + " for " + desc + ".\n\nAmount: " + inr(total) + "\nPay by UPI, card or netbanking: " + url + (expires ? "\nValid till " + new Date(expires).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "") + "\n\nYou'll get a GST invoice by email as soon as it's paid.";
+  }
+  function pmtGstSplit(amt, gst, mode, buyer) {
+    if (!gst || mode === "none") return { taxable: amt, tax: 0, total: amt, same: true, rate: 0 };
+    const r = gst.rate, taxable = mode === "included" ? Math.round(amt * 100 / (100 + r)) : amt, total = mode === "included" ? amt : amt + Math.round(amt * r / 100);
+    return { taxable, tax: total - taxable, total, same: !buyer || buyer === gst.seller_state, rate: r };
+  }
+  async function openPayLink(pre) {
+    pre = pre || {};
+    if (!S.storeStatus) S.storeStatus = await api("GET", "store-status").catch(() => ({}));
+    const gst = S.storeStatus.gst, home = gst ? gst.seller_state : "";
+    const m = document.createElement("div"); m.className = "modal";
+    const svc = (S.content.services || []).map(v => v.name).filter(Boolean).slice(0, 6);
+    m.innerHTML = '<div class="box pl-box" role="dialog" aria-modal="true" aria-labelledby="plTitle"><header><h2 id="plTitle">New payment link</h2><button class="btn btn-g btn-sm" data-x>Close</button></header>' +
+      '<p class="help">The customer pays by UPI, card or netbanking through Razorpay. Their GST invoice is emailed automatically and the order appears under Orders.</p>' +
+      (S.storeStatus.test ? '<div class="pl-test">Test mode: links use your Razorpay test keys, so no real money moves.</div>' : '') +
+      '<form id="plForm" class="form pl-form" novalidate>' +
+        '<div class="two"><div class="fld"><label for="plName">Customer name</label><input type="text" id="plName" required maxlength="120" value="' + esc(pre.name || "") + '"></div>' +
+        '<div class="fld"><label for="plPhone">Mobile</label><input type="tel" id="plPhone" required maxlength="20" value="' + esc(pre.phone || "") + '" placeholder="98260 11122"></div></div>' +
+        '<div class="two"><div class="fld"><label for="plEmail">Email <small>for the invoice</small></label><input type="email" id="plEmail" maxlength="160" value="' + esc(pre.email || "") + '"></div>' +
+        '<div class="fld"><label for="plBiz">Business name <small>optional</small></label><input type="text" id="plBiz" maxlength="160" value="' + esc(pre.business || "") + '"></div></div>' +
+        '<div class="fld"><label for="plDesc">What is it for</label><input type="text" id="plDesc" required maxlength="200" value="' + esc(pre.description || "") + '" placeholder="e.g. Website design – 50% advance">' +
+          (svc.length ? '<div class="pl-chips">' + svc.map(s => '<button type="button" data-pldesc="' + esc(s) + '">' + esc(s) + '</button>').join("") + '</div>' : '') + '</div>' +
+        '<div class="two"><div class="fld"><label for="plAmt">Amount (₹)</label><input type="number" id="plAmt" required min="1" max="1000000" step="1" inputmode="decimal" value="' + esc(pre.amount || "") + '"></div>' +
+        '<div class="fld"><label for="plDays">Link valid for</label><select id="plDays"><option value="3">3 days</option><option value="7" selected>7 days</option><option value="15">15 days</option><option value="30">30 days</option></select></div></div>' +
+        (gst ? '<fieldset class="fld pl-gst"><legend>GST (' + gst.rate + '%)</legend><label class="chk"><input type="radio" name="plGst" value="add" checked><span>Add GST on top</span></label><label class="chk"><input type="radio" name="plGst" value="included"><span>Amount already includes GST</span></label><label class="chk"><input type="radio" name="plGst" value="none"><span>No GST <span class="hint">e.g. reimbursing a domain you bought for them</span></span></label></fieldset>' +
+          '<div class="two"><div class="fld"><label for="plGstin">Customer GSTIN <small>for a B2B invoice</small></label><input type="text" id="plGstin" maxlength="15" value="' + esc(pre.gstin || "") + '" placeholder="22ABCDE1234F1Z5"></div>' +
+          '<div class="fld"><label for="plState">Customer\'s state</label><select id="plState">' + Object.entries(STATES).map(([k, v]) => '<option value="' + k + '"' + (k === (pre.state || home) ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select></div></div>' : '') +
+        '<div class="pl-sum" id="plSum" aria-live="polite"></div>' +
+        '<details class="pl-more"><summary>More options</summary><div class="fld"><label for="plNote">Note for your team <small>not shown to the customer</small></label><input type="text" id="plNote" maxlength="500"></div>' +
+          '<label class="chk"><input type="checkbox" id="plSms"><span>Razorpay also sends the link by SMS</span></label><label class="chk"><input type="checkbox" id="plMail"><span>Razorpay also emails the link</span></label></details>' +
+        '<div class="pl-err" id="plErr" role="alert"></div>' +
+        '<div class="pl-foot"><button type="button" class="btn btn-g" data-x>Cancel</button><button type="submit" class="btn btn-p" id="plGo">Create payment link</button></div>' +
+      '</form></div>';
+    document.body.appendChild(m);
+    const $m = s => m.querySelector(s), mode = () => (m.querySelector('input[name="plGst"]:checked') || {}).value || "none";
+    const sum = () => {
+      const amt = Math.round((Number($m("#plAmt").value) || 0) * 100);
+      const gi = $m("#plGstin") ? $m("#plGstin").value.trim().toUpperCase() : "";
+      if ($m("#plState") && /^\d{2}/.test(gi) && STATES[gi.slice(0, 2)]) $m("#plState").value = gi.slice(0, 2);
+      const g = pmtGstSplit(amt, gst, mode(), $m("#plState") ? $m("#plState").value : "");
+      $m("#plSum").innerHTML = amt ? '<span>Customer pays</span><b>' + inr(g.total) + '</b>' + (g.tax ? '<small>' + inr(g.taxable) + ' + GST ' + inr(g.tax) + ' (' + (g.same ? 'CGST ' + inr(Math.floor(g.tax / 2)) + ' + SGST ' + inr(g.tax - Math.floor(g.tax / 2)) : 'IGST ' + inr(g.tax)) + ')</small>' : '<small>No GST added</small>') : '<span>Enter an amount to see what the customer pays.</span>';
+    };
+    sum(); m.oninput = sum; m.onchange = sum;
+    setTimeout(() => (pre.name ? $m("#plDesc").value ? $m("#plAmt") : $m("#plDesc") : $m("#plName")).focus(), 30);
+    const close = () => { m.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = e => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    m.addEventListener("click", e => {
+      if (e.target === m || e.target.closest("[data-x]")) return close();
+      const c = e.target.closest("[data-pldesc]"); if (c) { $m("#plDesc").value = c.dataset.pldesc + " – "; $m("#plDesc").focus(); }
+      const cp = e.target.closest("[data-copy]"); if (cp) { (navigator.clipboard ? navigator.clipboard.writeText(cp.dataset.copy) : Promise.reject()).then(() => toast("Link copied.")).catch(() => { const i = $m("#plUrl"); if (i) { i.select(); } toast("Select the link and copy it.", true); }); }
+    });
+    $m("#plForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const go = $m("#plGo"); go.disabled = true; go.textContent = "Creating…"; $m("#plErr").textContent = "";
+      const body = { customer: { name: $m("#plName").value, phone: $m("#plPhone").value, email: $m("#plEmail").value, business: $m("#plBiz").value, gstin: $m("#plGstin") ? $m("#plGstin").value : "", state: $m("#plState") ? $m("#plState").value : "" },
+        description: $m("#plDesc").value.replace(/\s*–\s*$/, ""), amount: Number($m("#plAmt").value), gst: mode(), days: Number($m("#plDays").value), note: $m("#plNote").value, notifySms: $m("#plSms").checked, notifyEmail: $m("#plMail").checked, leadId: pre.leadId || "" };
+      try {
+        const r = await api("POST", "pay-link", body);
+        if (pre.leadId) api("POST", "lead-activity", { leadId: pre.leadId, kind: "note", detail: ("Payment link sent: " + inr(r.total) + " for " + body.description + " (" + r.order_no + ")").slice(0, 500) }).catch(() => {});
+        S.orders = await api("GET", "orders").catch(() => S.orders);
+        const wa = "https://wa.me/" + waNum(body.customer.phone) + "?text=" + encodeURIComponent(linkWaText(body.customer.name, body.description, r.total, r.url, r.expires_at));
+        m.querySelector(".box").innerHTML = '<header><h2>Payment link ready</h2><button class="btn btn-g btn-sm" data-x>Done</button></header>' +
+          '<div class="pl-done"><span class="pl-amt">' + inr(r.total) + '</span><p>' + esc(body.description) + ' · ' + esc(body.customer.name) + '</p>' +
+          '<div class="pl-url"><input type="text" readonly value="' + esc(r.url) + '" aria-label="Payment link" id="plUrl"><button class="btn btn-s" data-copy="' + esc(r.url) + '">Copy</button></div>' +
+          '<div class="pl-acts"><a class="btn btn-p" href="' + esc(wa) + '" target="_blank" rel="noopener">' + IC.wa + ' Send on WhatsApp</a><a class="btn btn-g" href="' + esc(r.url) + '" target="_blank" rel="noopener">Open link</a></div>' +
+          '<p class="help">Valid till ' + new Date(r.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "long" }) + '. Order ' + esc(r.order_no) + ' is in Orders as "Not paid" until the customer pays.' + (r.test ? ' Test mode: use Razorpay\'s test UPI or card to try it.' : '') + '</p></div>';
+        if (S.view === "orders") S.orderFilter = Object.assign(S.orderFilter || {}, { status: "" });
+        if (S.view === "orders" || S.view === "today") renderView();
+      } catch (err) {
+        $m("#plErr").textContent = err.status === 404 && /not found/i.test(err.message) ? "Payment links need a one-time server update before they work. Ask your developer to deploy the latest store function and run the payment-links migration." : err.message;
+        go.disabled = false; go.textContent = "Create payment link";
+      }
+    });
+  }
+  async function cancelLink(orderNo) {
+    if (!confirm("Cancel this payment link? The customer won't be able to pay with it any more.")) return;
+    try { await api("POST", "pay-link-cancel", { orderNo }); S.orders = await api("GET", "orders").catch(() => S.orders); toast("Link cancelled."); renderView(); } catch (err) { toast(err.message, true); }
+  }
+
   /* ---------- store: orders ---------- */
   const inr = p => "₹" + (Number(p || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
   const ORDER_ST = { created: ["Not paid", "off"], paid: ["Paid", "live"], active: ["Active", "live"], failed: ["Failed", "bad"], cancelled: ["Cancelled", "off"], halted: ["Payment issue", "warn"], completed: ["Completed", "off"], refunded: ["Refunded", "warn"] };
@@ -559,14 +649,16 @@
       '<div class="filters"><input type="search" id="oq" placeholder="Search order, name, phone, GSTIN…" value="' + esc(f.q) + '" aria-label="Search orders">' +
       '<select id="ost" aria-label="Filter by status"><option value="">All orders</option><option value="paid"' + (f.status === "paid" ? " selected" : "") + '>Paid orders</option>' + Object.entries(ORDER_ST).map(([k, v]) => '<option value="' + k + '"' + (f.status === k ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select>' +
       '<select id="oprod" aria-label="Filter by product"><option value="">All products</option>' + products.map(([k, v]) => '<option value="' + esc(k) + '"' + (f.product === k ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select>' +
-      '<span class="help">' + rows.length + ' of ' + O.length + '</span><span style="flex:1"></span><button class="btn btn-s btn-sm" data-act="ocsv"' + (rows.length ? "" : " disabled") + '>Export CSV</button>' +
+      '<span class="help">' + rows.length + ' of ' + O.length + '</span><span style="flex:1"></span><button class="btn btn-p btn-sm" data-act="paylink">+ Payment link</button><button class="btn btn-s btn-sm" data-act="ocsv"' + (rows.length ? "" : " disabled") + '>Export CSV</button>' +
       '<span class="gst-exp"><input type="month" id="gstMonth" value="' + new Date().toISOString().slice(0, 7) + '" aria-label="GST month"><button class="btn btn-s btn-sm" data-act="gstcsv"' + ((S.payments || []).length ? "" : " disabled") + '>GST register</button></span></div>' +
       (rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Product</th><th>Paid</th><th>Status</th><th>Notes</th></tr></thead><tbody>' + rows.map(o => {
         const s = ORDER_ST[o.status] || [o.status, "off"];
         return '<tr><td>' + new Date(o.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '<div class="sub">' + new Date(o.created_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) + '</div></td>' +
           '<td><b style="font-family:var(--mono);font-size:13px">' + esc(o.order_no) + '</b>' + (o.rzp_payment_id ? '<div class="sub">' + esc(o.rzp_payment_id) + '</div>' : '') + '</td>' +
           '<td><b>' + esc(o.customer_name) + '</b>' + (o.business ? '<div class="sub">' + esc(o.business) + (o.city ? " · " + esc(o.city) : "") + '</div>' : '') + '<div class="sub"><a href="tel:' + esc(o.phone) + '">' + esc(o.phone) + '</a> · <a href="https://wa.me/' + waNum(o.phone) + '" target="_blank" rel="noopener">WhatsApp</a></div><div class="sub"><a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a></div>' + (o.gstin ? '<div class="sub">GSTIN ' + esc(o.gstin) + '</div>' : '') + '</td>' +
-          '<td>' + esc(o.product_name) + '<div class="sub">' + esc(o.plan_name) + ' · ' + (o.billing === "one-time" ? "one-time" : o.billing) + '</div><div class="sub">' + inr(o.price) + (o.setup_fee ? " + " + inr(o.setup_fee) + " setup" : "") + '</div></td>' +
+          (isLink(o) ? '<td>' + esc(o.product_name) + '<div class="sub">Payment link · ' + inr(o.total_amount || o.price) + (Number(o.gst_rate) ? ' incl. GST' : '') + '</div>' +
+            (o.status === "created" && o.pay_link_url ? (linkExpired(o) ? '<div class="sub" style="color:var(--bad)">Link expired</div>' : '<div class="sub">Expires ' + new Date(o.pay_link_expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div><div class="pl-row"><button class="btn btn-s btn-sm" data-copy="' + esc(o.pay_link_url) + '">Copy link</button><a class="btn btn-s btn-sm" target="_blank" rel="noopener" href="https://wa.me/' + waNum(o.phone) + '?text=' + encodeURIComponent(linkWaText(o.customer_name, o.product_name, o.total_amount, o.pay_link_url, o.pay_link_expires_at)) + '">WhatsApp</a>' + (isStaff() ? '' : '<button class="btn btn-g btn-sm" data-plcancel="' + esc(o.order_no) + '">Cancel</button>') + '</div>') : '') + '</td>'
+          : '<td>' + esc(o.product_name) + '<div class="sub">' + esc(o.plan_name) + ' · ' + (o.billing === "one-time" ? "one-time" : o.billing) + '</div><div class="sub">' + inr(o.price) + (o.setup_fee ? " + " + inr(o.setup_fee) + " setup" : "") + '</div></td>') +
           '<td><b>' + inr(o.amount_paid) + '</b>' + (Number(o.gst_rate) ? '<div class="sub">incl. GST ' + Number(o.gst_rate) + '% · ' + (o.seller_state && o.seller_state === o.buyer_state ? "CGST+SGST" : "IGST") + '</div>' : '') + invoiceLinks(o) + (o.payments > 1 ? '<div class="sub">' + o.payments + ' payments</div>' : '') + (o.next_charge_at && o.status === "active" ? '<div class="sub">Next ' + new Date(o.next_charge_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
           '<td>' + (isStaff() ? '<span class="tagp ' + s[1] + '">' + s[0] + '</span>' : '<select class="st ost-' + s[1] + '" data-ostatus="' + o.id + '" aria-label="Order status">' + Object.entries(ORDER_ST).map(([k, v]) => '<option value="' + k + '"' + (k === o.status ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select>') + '</td>' +
           '<td>' + (isStaff() ? '<div class="msg">' + esc(o.notes) + '</div>' : '<textarea class="lead-notes" data-onotes="' + o.id + '" aria-label="Notes">' + esc(o.notes) + '</textarea>') + '</td></tr>';
@@ -618,7 +710,7 @@
         sec("razorpay_key_secret", "Key Secret", cfg.razorpay_key_secret_set, "Shown once when you generate the key. Stored securely; it never reaches the website.") +
         sec("razorpay_webhook_secret", "Webhook secret", cfg.razorpay_webhook_secret_set, "The secret you type when adding the webhook below.") +
         '<div class="fld"><label>Webhook URL <button type="button" class="btn btn-g btn-sm" data-copy="' + esc(hook) + '">Copy</button></label><code class="codebox">' + esc(hook) + '</code>' +
-          '<span class="hint">Razorpay → Account & Settings → Webhooks → Add new webhook. Paste this URL, set a secret, and tick: payment.captured, payment.failed, subscription.activated, subscription.charged, subscription.halted, subscription.cancelled, subscription.completed, refund.processed. This keeps renewals and cancellations in sync.</span></div>' +
+          '<span class="hint">Razorpay → Account & Settings → Webhooks → Add new webhook. Paste this URL, set a secret, and tick: payment.captured, payment.failed, subscription.activated, subscription.charged, subscription.halted, subscription.cancelled, subscription.completed, refund.processed, payment_link.paid, payment_link.expired, payment_link.cancelled. This keeps renewals and cancellations in sync.</span></div>' +
         txt("gst_note", "Extra note under prices", "e.g. Setup within 2 working days", "Optional. Shown under the plans on every product page.") +
         '<p class="help" style="font-size:13px">Subscriptions need Razorpay Subscriptions turned on for your account (ask Razorpay support if plans fail to create).</p>' +
       '</div>' +
@@ -803,7 +895,7 @@
     d.innerHTML = '<header class="dr-head"><div><span class="prio p-' + l.priority + '">' + PRIO[l.priority] + ' · ' + l.score + '</span><h2>' + esc(l.name) + '</h2><p>' + esc([l.business, l.businessType, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</p></div><button class="ib" data-dr="close" aria-label="Close">✕</button></header>' +
       '<div class="dr-body">' +
         (w ? '<div class="dr-alert' + (w.late ? " late" : "") + '">⏱ Waiting ' + w.txt + ' for a first reply' + (w.late ? ' · past your ' + slaMin() + '-minute target' : '') + '</div>' : l.firstResponseAt ? '<div class="dr-ok">✓ First reply in ' + replyTime(l) + '</div>' : '') +
-        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + '</div>' +
+        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + (l.phone ? '<button class="btn btn-s btn-sm" data-dr="pay">₹ Request payment</button>' : '') + '</div>' +
         '<div class="dr-grid">' +
           field("Stage", '<select data-df="stage">' + STAGES.map(([k, v]) => '<option value="' + k + '"' + (k === l.stage ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
           field("Priority", '<select data-df="priority">' + Object.entries(PRIO).map(([k, v]) => '<option value="' + k + '"' + (k === l.priority ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
@@ -822,6 +914,7 @@
     d.onclick = async e => {
       const b = e.target.closest("[data-dr],[data-log]"); if (!b) return;
       if (b.dataset.dr === "close") return closeLead();
+      if (b.dataset.dr === "pay") return openPayLink({ name: l.name, phone: l.phone, email: l.email, business: l.business, description: l.service ? l.service + " – " : "", amount: l.dealValue || "", leadId: l.id });
       if (b.dataset.log) { logActivity(l.id, b.dataset.log, b.dataset.log === "whatsapp" ? "Opened WhatsApp chat" : b.dataset.log === "call" ? "Called" : "Emailed", true); return; }
       if (b.dataset.dr === "log") { const t = document.getElementById("actText"); await logActivity(l.id, document.getElementById("actKind").value, t.value.trim() || "", false); t.value = ""; }
     };
@@ -1126,6 +1219,8 @@
     if (d.act === "csv") return exportCsv();
     if (d.act === "message") return openMessenger();
     if (d.act === "ocsv") return exportOrders();
+    if (d.act === "paylink") return openPayLink();
+    if (d.plcancel) return cancelLink(d.plcancel);
     if (d.act === "gstcsv") return exportGst();
     if (d.act === "savepay") return savePayments();
     if (d.act === "testmail") { const to = (document.getElementById("testTo") || {}).value || ""; b.disabled = true; try { await api("POST", "test-mail", { to }); toast("Test email sent to " + to + ". Check the inbox (and spam)."); } catch (err) { toast(err.message, true); } b.disabled = false; return; }

@@ -6,6 +6,8 @@
 //   POST /webhook     Razorpay webhooks (signature checked with the webhook secret): captures, renewals, cancellations
 //   POST /lead-mail   internal (database trigger): auto-reply to a new enquiry and alert the team
 //   POST /test-mail   admin only: send a test email
+//   POST /pay-link    team only: a Razorpay payment link for any amount (custom work, advances), GST invoice on payment
+//   POST /pay-link/cancel  team only: cancel an unpaid link
 //   GET  /invoice     GST tax invoice for one payment (?id=<payment id>&k=<view key>), printable
 // Keys live in private.store_settings and are read with the service role; they are never sent to browsers.
 
@@ -124,6 +126,7 @@ export function inWords(paiseAmt: number) {
   return "Rupees " + words(r) + (p ? " and " + two(p) + " Paise" : "") + " Only";
 }
 
+const keysReady = (c: Cfg) => !!(c && /^rzp_(test|live)_/.test(c.razorpay_key_id || "") && c.razorpay_key_secret);
 const storeReady = (c: Cfg) => !!(c && c.store_on && /^rzp_(test|live)_/.test(c.razorpay_key_id || "") && c.razorpay_key_secret);
 const mailReady = (c: Cfg) => !!(c && c.resend_api_key && /@/.test(c.mail_from || ""));
 
@@ -244,6 +247,13 @@ async function markPaid(cfg: Cfg, o: any, paymentId: string, amount: number) {
       }
     } catch (_) { /* the order is what matters */ }
   }
+  // a payment link sent to an existing lead: the deal is won
+  if (upd.lead_id && upd.product_slug === "payment-link") {
+    try {
+      await db("/rest/v1/leads?id=eq." + upd.lead_id, { method: "PATCH", body: JSON.stringify({ stage: "won" }) });
+      await db("/rest/v1/lead_activity", { method: "POST", body: JSON.stringify({ lead_id: upd.lead_id, kind: "note", detail: ("Paid " + rupees(upd.amount_paid) + " online for " + upd.product_name + " (" + upd.order_no + ")").slice(0, 500) }) });
+    } catch (_) { /* the payment is what matters */ }
+  }
   await orderEmails(cfg, await orderBy("id", upd.id));
   return upd;
 }
@@ -335,6 +345,13 @@ async function webhook(req: Request, cfg: Cfg) {
   } else if (sub && /^subscription\.(halted|cancelled|completed|paused)$/.test(e)) {
     const o = await orderBy("rzp_subscription_id", sub.id);
     if (o) await patchOrder(o.id, { status: e === "subscription.paused" ? "halted" : e.split(".")[1] });
+  } else if (e === "payment_link.paid" && P.payment_link && P.payment_link.entity) {
+    const pl = P.payment_link.entity;
+    const o = (await orderBy("pay_link_id", pl.id)) || (pl.reference_id ? await orderBy("order_no", pl.reference_id) : null);
+    if (o && pay) await markPaid(cfg, o, pay.id, pay.amount);
+  } else if ((e === "payment_link.expired" || e === "payment_link.cancelled") && P.payment_link && P.payment_link.entity) {
+    const o = await orderBy("pay_link_id", P.payment_link.entity.id);
+    if (o && o.status === "created") await patchOrder(o.id, { status: "cancelled" });
   } else if (e === "payment.failed" && pay) {
     const o = pay.order_id ? await orderBy("rzp_order_id", pay.order_id) : null;
     if (o && o.status === "created") await patchOrder(o.id, { status: "failed" });
@@ -342,6 +359,67 @@ async function webhook(req: Request, cfg: Cfg) {
     const o = await orderBy("rzp_payment_id", P.refund.entity.payment_id);
     if (o) await patchOrder(o.id, { status: "refunded" });
   }
+  return { ok: true };
+}
+
+
+/* ---------- payment links (any amount, created from the admin panel) ---------- */
+async function teamOnly(req: Request) {
+  const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const r = await fetch(SB_URL + "/rest/v1/rpc/is_team_member", { method: "POST", headers: { apikey: SB_ANON || SB_SERVICE, Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: "{}" });
+  if (!r.ok || (await r.json()) !== true) throw new HttpError(403, "Only your team can create payment links.");
+}
+export async function payLink(req: Request, cfg: Cfg) {
+  await teamOnly(req);
+  if (!keysReady(cfg)) throw new HttpError(400, "Add your Razorpay keys under Store → Payments & email first.");
+  const b = await req.json().catch(() => ({}));
+  const c = b.customer || {};
+  const cust = { name: clean(c.name, 120), email: clean(c.email, 160).toLowerCase(), phone: clean(c.phone, 30), business: clean(c.business, 160), gstin: clean(c.gstin, 20).toUpperCase().replace(/\s/g, ""), city: clean(c.city, 80), state: clean(c.state, 2) };
+  if (!cust.name) throw new HttpError(400, "Add the customer's name.");
+  const digits = cust.phone.replace(/\D/g, "").replace(/^0+/, "");
+  if (digits.length < 10) throw new HttpError(400, "Add the customer's 10-digit mobile number.");
+  if (cust.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cust.email)) throw new HttpError(400, "That email doesn't look right. Leave it empty if you don't have one.");
+  if (cust.gstin && !GSTIN_RE.test(cust.gstin)) throw new HttpError(400, "That GSTIN doesn't look right. It has 15 characters, e.g. 22ABCDE1234F1Z5.");
+  if (cust.gstin) cust.state = cust.gstin.slice(0, 2);
+  const desc = clean(b.description, 200);
+  if (!desc) throw new HttpError(400, "Say what the payment is for, e.g. Website design – 50% advance.");
+  const amt = paise(Number(b.amount));
+  if (!(amt >= 100) || amt > paise(1000000)) throw new HttpError(400, "Enter an amount between ₹1 and ₹10,00,000.");
+  const mode = ["add", "included", "none"].includes(b.gst) ? b.gst : "add";
+  const useGst = gstOn(cfg) && mode !== "none", rate = useGst ? Number(cfg.gst_rate) : 0, incl = mode === "included";
+  const sellerState = useGst ? cfg.seller_gstin.slice(0, 2) : "";
+  if (!STATES[cust.state]) cust.state = sellerState || "";
+  if (useGst && !STATES[cust.state]) throw new HttpError(400, "Choose the customer's state for GST.");
+  const g = gstOf(amt, rate, incl, sellerState === cust.state);
+  const days = Math.min(30, Math.max(1, Math.round(Number(b.days) || 7)));
+  const expires = Date.now() + days * 864e5;
+  const leadId = /^[0-9a-f-]{36}$/.test(String(b.leadId || "")) ? b.leadId : null;
+  const no = orderNo();
+  const row = (await db("/rest/v1/orders", { method: "POST", prefer: "return=representation", body: JSON.stringify({
+    order_no: no, product_slug: "payment-link", product_name: desc, plan_name: "", billing: "one-time", price: amt, setup_fee: 0,
+    customer_name: cust.name, email: cust.email, phone: cust.phone, business: cust.business, gstin: cust.gstin, city: cust.city,
+    gst_rate: rate, gst_inclusive: incl, buyer_state: cust.state, seller_state: sellerState,
+    taxable_amount: g.taxable, tax_amount: g.tax, total_amount: g.total, lead_id: leadId, notes: clean(b.note, 500),
+  }) }))[0];
+  const site = await siteInfo();
+  const link = await razorpay(cfg, "/payment_links", {
+    amount: g.total, currency: "INR", accept_partial: false, reference_id: no, expire_by: Math.floor(expires / 1000),
+    description: (desc + " – " + site.brand).slice(0, 2048),
+    customer: { name: cust.name, contact: "+91" + digits.slice(-10), ...(cust.email ? { email: cust.email } : {}) },
+    notify: { sms: !!b.notifySms, email: !!(b.notifyEmail && cust.email) }, reminder_enable: true,
+    notes: { order_no: no }, callback_url: site.url + "/?paid=" + no, callback_method: "get",
+  });
+  await patchOrder(row.id, { pay_link_id: link.id, pay_link_url: link.short_url, pay_link_expires_at: new Date(expires).toISOString() });
+  return { order_no: no, url: link.short_url, amount: amt, taxable: g.taxable, tax: g.tax, total: g.total, rate, expires_at: new Date(expires).toISOString(), test: /^rzp_test_/.test(cfg.razorpay_key_id) };
+}
+async function cancelPayLink(req: Request, cfg: Cfg) {
+  await teamOnly(req);
+  const b = await req.json().catch(() => ({}));
+  const o = await orderBy("order_no", clean(b.order_no, 40));
+  if (!o || o.product_slug !== "payment-link" || !o.pay_link_id) throw new HttpError(404, "Payment link not found.");
+  if (o.status !== "created") throw new HttpError(400, "This link is already " + (o.status === "paid" ? "paid" : "closed") + ".");
+  await razorpay(cfg, "/payment_links/" + o.pay_link_id + "/cancel", {});
+  await patchOrder(o.id, { status: "cancelled" });
   return { ok: true };
 }
 
@@ -429,6 +507,8 @@ export async function handle(req: Request): Promise<Response> {
     if (route === "/webhook") return json(await webhook(req, cfg));
     if (route === "/lead-mail") return json(await leadMail(req, cfg));
     if (route === "/test-mail") return json(await testMail(req, cfg));
+    if (route === "/pay-link") return json(await payLink(req, cfg));
+    if (route === "/pay-link/cancel") return json(await cancelPayLink(req, cfg));
     throw new HttpError(404, "Not found");
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;

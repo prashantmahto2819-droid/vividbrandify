@@ -828,6 +828,15 @@ function vbStart() {
   else if (window.__LEGAL__ && showLegal(window.__LEGAL__, false)) { /* legal page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
+  // back from a Razorpay payment link
+  const qs = new URLSearchParams(location.search);
+  if (qs.get("razorpay_payment_link_status")) {
+    const paid = qs.get("razorpay_payment_link_status") === "paid", n = document.createElement("div");
+    n.className = "pay-note-bar" + (paid ? "" : " bad"); n.setAttribute("role", "status");
+    n.innerHTML = paid ? "<b>Payment received. Thank you!</b> Your GST invoice is on its way by email." : "<b>The payment didn't go through.</b> No money was taken. Please try the link again or message us on WhatsApp.";
+    document.body.appendChild(n); setTimeout(() => n.remove(), 12000);
+    history.replaceState(history.state, "", location.pathname + location.hash);
+  }
   // show the page once the brand fonts are in (capped), so headlines don't reflow or flash in a fallback face
   const reveal = () => document.documentElement.classList.remove("vb-boot");
   if (document.fonts && document.fonts.status !== "loaded") Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 700))]).then(reveal); else reveal();

@@ -887,3 +887,8 @@ body.co-open{overflow:hidden}
 .foot-legal nav{display:flex;flex-wrap:wrap;gap:4px 16px}
 .foot-legal nav a{padding:4px 0}
 .foot-legal p span{margin-left:8px}.foot-legal p span:last-child{display:block;margin-left:0;margin-top:2px}
+
+/* note shown after paying through a payment link */
+.pay-note-bar{position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:90;width:min(560px,calc(100vw - 32px));background:#12301F;color:#E8FFF0;border-radius:14px;padding:14px 18px;box-shadow:0 20px 50px rgba(0,0,0,.35);font-size:15px;animation:waIn .4s both}
+.pay-note-bar.bad{background:#3A1414;color:#FFE4E4}
+.pay-note-bar b{display:block}

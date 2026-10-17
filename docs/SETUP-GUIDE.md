@@ -113,3 +113,12 @@ Go to **Admin → WhatsApp → Chat widget**, choose **custom code**, paste your
 Admin → Site → **Legal & GST** holds the business details from the GST certificate (trade name, legal name, GSTIN, registered address, grievance officer) and the four policies: Terms, Privacy, Refund and cancellation, Delivery. They appear at `/legal/terms`, `/legal/privacy`, `/legal/refunds`, `/legal/delivery` and `/legal/business`, in the footer of every page and as a note at checkout. Razorpay asks for these pages when it activates your account. Have your CA or lawyer read the policies once.
 
 Invoices use the seller details under Store → **Payments & email** (GSTIN, legal business name, registered address, SAC code). Confirm the SAC code with your CA.
+
+## 10. Payment links (any amount)
+
+Admin → Orders → **+ Payment link**, or **₹ Request payment** on a lead, creates a Razorpay payment link for any amount: a website advance, a campaign fee, a custom package. Choose whether GST is added on top, already included, or not charged. Share the link on WhatsApp in one tap. When the customer pays, the order is marked paid, a numbered GST invoice is emailed, and a lead it came from moves to Won.
+
+One-time setup (needs Supabase access):
+1. Run `supabase/migrations/20261017_payment_links.sql` in the SQL editor (adds three columns to `orders`).
+2. Deploy the updated `store` edge function (`supabase functions deploy store --no-verify-jwt`).
+3. In Razorpay → Webhooks, also tick `payment_link.paid`, `payment_link.expired` and `payment_link.cancelled`.
