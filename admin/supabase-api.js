@@ -181,6 +181,10 @@
         };
       }
 
+      case "GET quotes": return (await req("/rest/v1/quotes?select=*&order=created_at.desc&limit=500")) || [];
+      case "POST quotes": { const out = await req("/rest/v1/quotes", { method: "POST", body, headers: { Prefer: "return=representation" } }); return out[0]; }
+      case "PATCH quotes": { const out = await req("/rest/v1/quotes?id=eq." + encodeURIComponent(id), { method: "PATCH", body, headers: { Prefer: "return=representation" } }); if (!out.length) throw new ApiError(404, "Quote not found"); return out[0]; }
+      case "DELETE quotes": { const out = await req("/rest/v1/quotes?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: { Prefer: "return=representation" } }); if (!out || !out.length) throw new ApiError(403, "Only admins can remove quotes."); return { ok: true }; }
       case "GET leads": return (await req("/rest/v1/leads?select=*&order=created_at.desc&limit=1000")).map(mapLead);
       case "PATCH leads": {
         const patch = {};

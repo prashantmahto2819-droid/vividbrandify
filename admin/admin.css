@@ -464,3 +464,39 @@ button.t-name:hover{text-decoration:underline;text-decoration-color:var(--accent
 .pl-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 @media (max-width:560px){.pl-form .two{grid-template-columns:1fr}}
 .modal{z-index:70} /* dialogs open above the lead panel */
+
+/* ---------- quotations ---------- */
+.modal .box.q-box{width:min(1080px,100%);max-height:92vh}
+.q-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+.q-main{display:grid;gap:18px;min-width:0}
+.q-main section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px}
+.q-main h3,.q-side h3{font-size:15px;margin:0}
+.q-two{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.q-box .fld label small{font-weight:400;color:var(--muted)}
+.q-box input[type=text],.q-box input[type=number],.q-box input[type=date],.q-box select,.q-box textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--surface);color:var(--ink);font:14.5px var(--body)}
+.q-box textarea{min-height:0;resize:vertical}
+.q-box input:focus,.q-box select:focus,.q-box textarea:focus{outline:none;border-color:var(--accent)}
+.q-items{display:grid;gap:10px}
+.q-item{display:grid;grid-template-columns:minmax(0,1fr) 80px 120px 110px 32px;gap:6px 10px;align-items:end;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+.q-desc{grid-column:1/5}
+.q-amt{font:700 15px var(--body);text-align:right;padding-bottom:10px;font-variant-numeric:tabular-nums}
+.q-del{margin-bottom:5px}
+.q-side{display:grid;gap:14px;position:sticky;top:0}
+.q-sum{display:grid;gap:10px}
+.q-line{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.q-line input{width:120px!important;text-align:right}
+.q-line.sm{font-size:13.5px;color:var(--muted)}
+.q-tot{border-top:2px solid var(--ink);padding-top:10px}
+.q-tot b{font:800 24px/1 var(--display);font-variant-numeric:tabular-nums}
+.q-gst{border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:grid;gap:6px;margin:0}
+.q-gst legend{font-weight:700;font-size:13.5px;padding:0 4px}
+.q-btns{display:flex;flex-wrap:wrap;gap:8px}
+.q-btns svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8}
+.q-share{display:grid;gap:10px}
+.q-pay{display:grid;gap:6px}.q-pay label{font-weight:600;font-size:14px}
+.q-pay select{width:auto!important}
+.q-err{color:var(--bad);font-weight:600;font-size:14px}.q-err:empty{display:none}
+.q-row{cursor:pointer}.q-row:hover td{background:var(--soft)}
+.q-acts{white-space:nowrap;text-align:right}.q-acts .btn+.btn{margin-left:6px}
+@media (max-width:900px){.q-grid{grid-template-columns:1fr}.q-side{position:static}}
+@media (max-width:620px){.q-two{grid-template-columns:1fr}.q-item{grid-template-columns:1fr 1fr}.q-name,.q-desc{grid-column:1/-1}.q-amt{text-align:left;padding:0}}

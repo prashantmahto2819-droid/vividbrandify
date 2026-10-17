@@ -181,6 +181,87 @@ function sitemap(c, origin) {
 }
 
 
+/* ---------- quotations: the customer's page at /q/<id>?k=<key> ---------- */
+const STATE_NAMES = { "01": "Jammu and Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh", "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur", "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal", "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat", "26": "Dadra and Nagar Haveli and Daman and Diu", "27": "Maharashtra", "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman and Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh", "38": "Ladakh", "97": "Other Territory" };
+const inrP = p => "₹" + (Number(p || 0) / 100).toLocaleString("en-IN", { minimumFractionDigits: Number(p) % 100 ? 2 : 0, maximumFractionDigits: 2 });
+function inWords(paiseAmt) {
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const two = n => n < 20 ? ones[n] : tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+  const three = n => (n >= 100 ? ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " : "") : "") + (n % 100 ? two(n % 100) : "");
+  const words = n => { if (!n) return "Zero"; const parts = []; const cr = Math.floor(n / 1e7); n %= 1e7; const lk = Math.floor(n / 1e5); n %= 1e5; const th = Math.floor(n / 1000); n %= 1000;
+    if (cr) parts.push(words(cr) + " Crore"); if (lk) parts.push(two(lk) + " Lakh"); if (th) parts.push(two(th) + " Thousand"); if (n) parts.push(three(n)); return parts.join(" "); };
+  const r = Math.floor(paiseAmt / 100), p = paiseAmt % 100;
+  return "Rupees " + words(r) + (p ? " and " + two(p) + " Paise" : "") + " Only";
+}
+async function loadQuote(id, key) {
+  const r = await fetch(SB_URL + "/rest/v1/rpc/quote_public", { method: "POST", headers: { apikey: SB_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_id: id, p_key: key }) });
+  if (!r.ok) return null;
+  return r.json();
+}
+function quotePage(q, c, id, key) {
+  const st = c.settings || {}, brand = st.brand || "Vivid Brandify", s = q.seller || {}, cu = q.customer || {};
+  const date = d => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+  const today = new Date(Date.now() + 5.5 * 36e5).toISOString().slice(0, 10);
+  const expired = q.valid_until && q.valid_until < today, gst = Number(q.gst_rate) > 0, same = !q.igst;
+  const wa = String(st.whatsapp || "").replace(/\D/g, ""), waText = encodeURIComponent("Hi, I have a question about quotation " + q.quote_no + ".");
+  const items = (q.items || []).map((it, i) => '<tr><td class="n">' + (i + 1) + '</td><td><b>' + esc(it.name) + '</b>' + (it.description ? '<div class="d">' + esc(it.description) + '</div>' : '') + '</td><td class="r">' + esc(it.qty) + (it.unit ? ' ' + esc(it.unit) : '') + '</td><td class="r">' + inrP(it.rate) + '</td><td class="r">' + inrP(Math.round(Number(it.qty) * Number(it.rate))) + '</td></tr>').join("");
+  const row = (k, v, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + k + '</td><td class="r">' + v + '</td></tr>';
+  const status = q.status === "accepted" ? '<span class="pill ok">Accepted ' + (q.accepted_at ? date(q.accepted_at) : '') + '</span>' : q.status === "declined" ? '<span class="pill">Declined</span>' : expired ? '<span class="pill warn">Expired</span>' : '';
+  const canAccept = q.status === "sent" && !expired;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
+<title>Quotation ${esc(q.quote_no)} | ${esc(brand)}</title><link rel="icon" href="/assets/brand/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+:root{--ink:#241517;--muted:#6B5A5C;--line:#EADFDA;--bg:#FBF7F4;--accent:#F7941D;--ok:#15803D}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Figtree,"Segoe UI",system-ui,sans-serif;padding:24px 14px 60px}
+.doc{max-width:860px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:16px;padding:36px;position:relative;overflow:hidden}
+.doc::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,#E2352B,#F7941D 55%,#FFC53D)}
+.top{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-start;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.top img{height:64px}.top h1{font:800 28px/1 "Bricolage Grotesque",sans-serif;letter-spacing:-.02em;margin:0 0 8px;text-align:right}
+.meta{text-align:right;color:var(--muted);font-size:14px}.meta b{color:var(--ink)}
+.pill{display:inline-block;margin-top:8px;font-weight:700;font-size:13px;border-radius:999px;padding:4px 12px;background:#F3ECE8;color:var(--muted)}.pill.ok{background:#DCFCE7;color:var(--ok)}.pill.warn{background:#FEF3C7;color:#B45309}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:22px 0}
+.k{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em;margin-bottom:4px}
+.parties b{font-size:16px}.pre{white-space:pre-line}
+table{width:100%;border-collapse:collapse}
+.items th{font-size:12.5px;font-weight:700;color:var(--muted);text-align:left;padding:10px 8px;border-bottom:2px solid var(--ink)}
+.items td{padding:12px 8px;border-bottom:1px solid var(--line);vertical-align:top}.items .d{color:var(--muted);font-size:13.5px;white-space:pre-line;margin-top:2px}
+.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}.items th.r{text-align:right}.legal a{color:inherit}.n{color:var(--muted);width:28px}
+.sum{width:min(360px,100%);margin:14px 0 0 auto}.sum td{padding:6px 8px}.sum .tot td{border-top:2px solid var(--ink);font:800 20px "Bricolage Grotesque",sans-serif;padding-top:10px}
+.words{margin:10px 0 0;color:var(--muted);font-size:13.5px;text-align:right}.words b{color:var(--ink)}
+.block{margin-top:24px;padding-top:16px;border-top:1px solid var(--line)}.block h2{font-size:15px;margin:0 0 6px}
+.acts{max-width:860px;margin:18px auto 0;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:12px 22px;font:700 15px Figtree,sans-serif;cursor:pointer;text-decoration:none}
+.btn-p{background:var(--accent);color:#1C0F04}.btn-g{background:#fff;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.accept{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.accept input{border:1.5px solid var(--line);border-radius:999px;padding:11px 16px;font:15px Figtree,sans-serif;min-width:200px}
+.done{max-width:860px;margin:18px auto 0;background:#DCFCE7;color:#14532D;border-radius:14px;padding:16px 20px;font-weight:600}
+.legal{max-width:860px;margin:14px auto 0;color:var(--muted);font-size:12.5px;text-align:center}
+@media (max-width:640px){.doc{padding:22px 16px}.parties{grid-template-columns:1fr}.top h1,.meta{text-align:left}.items th:nth-child(1),.items td:nth-child(1){display:none}}
+@media print{body{background:#fff;padding:0}.doc{border:0;padding:0}.doc::before{display:none}.acts,.done,.legal{display:none}}
+</style></head><body>
+<div class="doc">
+<div class="top"><img src="${esc(st.logo || "/assets/brand/logo.png")}" alt="${esc(brand)}"><div><h1>Quotation</h1><div class="meta">No. <b>${esc(q.quote_no)}</b><br>Date: ${date(q.created_at)}${q.valid_until ? "<br>Valid till: <b>" + date(q.valid_until + "T00:00:00+05:30") + "</b>" : ""}</div>${status ? '<div class="meta">' + status + '</div>' : ''}</div></div>
+<div class="parties"><div><div class="k">From</div><b>${esc(s.name || brand)}</b><div class="pre">${esc(s.address || st.address || "")}</div>${s.gstin ? "<div>GSTIN: <b>" + esc(s.gstin) + "</b></div>" : ""}${st.phone ? "<div>" + esc(st.phone) + "</div>" : ""}${st.email ? "<div>" + esc(st.email) + "</div>" : ""}</div>
+<div><div class="k">Prepared for</div><b>${esc(cu.business || cu.name || "")}</b>${cu.business && cu.name ? "<div>" + esc(cu.name) + "</div>" : ""}${cu.city ? "<div>" + esc(cu.city) + "</div>" : ""}${cu.gstin ? "<div>GSTIN: <b>" + esc(cu.gstin) + "</b></div>" : ""}${gst && q.buyer_state ? "<div>Place of supply: " + esc(STATE_NAMES[q.buyer_state] || q.buyer_state) + "</div>" : ""}${cu.phone ? "<div>" + esc(cu.phone) + "</div>" : ""}</div></div>
+<table class="items"><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${items}</tbody></table>
+<table class="sum"><tbody>${row("Subtotal", inrP(q.subtotal))}${q.discount ? row("Discount", "− " + inrP(q.discount)) : ""}${gst ? row(q.gst_mode === "included" ? "Taxable value (GST included in prices)" : "Taxable value", inrP(q.taxable)) + (same ? row("CGST " + Number(q.gst_rate) / 2 + "%", inrP(q.cgst)) + row("SGST " + Number(q.gst_rate) / 2 + "%", inrP(q.sgst)) : row("IGST " + Number(q.gst_rate) + "%", inrP(q.igst))) : ""}${row("Total", inrP(q.total), "tot")}</tbody></table>
+<p class="words">Amount in words: <b>${esc(inWords(Number(q.total)))}</b></p>
+${gst && s.sac ? '<p class="words">SAC: ' + esc(s.sac) + '</p>' : ''}
+${q.notes ? '<div class="block"><h2>Notes</h2><div class="pre">' + esc(q.notes) + '</div></div>' : ''}
+${q.terms ? '<div class="block"><h2>Terms</h2><div class="pre">' + esc(q.terms) + '</div></div>' : ''}
+</div>
+<div class="acts">${canAccept ? '<form class="accept" id="acc"><input name="n" placeholder="Your name (optional)" aria-label="Your name" maxlength="80"><button class="btn btn-p" type="submit">Accept this quotation</button></form>' : '<span></span>'}
+<span style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-g" type="button" onclick="print()">Download / Print</button>${wa ? '<a class="btn btn-g" href="https://wa.me/' + wa + '?text=' + waText + '" target="_blank" rel="noopener">Ask on WhatsApp</a>' : ''}</span></div>
+<div class="done" id="done" hidden></div>
+<p class="legal">${esc(brand)}${c.legal && c.legal.published ? ' · <a href="/legal/terms">Terms</a> · <a href="/legal/refunds">Refund policy</a>' : ''}</p>
+${canAccept ? `<script>document.getElementById("acc").addEventListener("submit",async e=>{e.preventDefault();const b=e.target.querySelector("button");b.disabled=true;b.textContent="Saving…";
+try{const r=await fetch(${JSON.stringify(SB_URL + "/rest/v1/rpc/quote_accept")},{method:"POST",headers:{apikey:${JSON.stringify(SB_KEY)},"Content-Type":"application/json"},body:JSON.stringify({p_id:${JSON.stringify(id)},p_key:${JSON.stringify(key)},p_name:e.target.n.value})});const j=await r.json();
+const d=document.getElementById("done");if(j&&j.ok){e.target.remove();d.textContent="Thank you! Your acceptance is recorded. We'll contact you shortly with the next steps and the payment link.";d.hidden=false}else{b.disabled=false;b.textContent="Accept this quotation";alert((j&&j.error)||"Couldn't save. Please try again or message us on WhatsApp.")}}
+catch(_){b.disabled=false;b.textContent="Accept this quotation";alert("Couldn't save. Please check your connection and try again.")}});</script>` : ''}
+</body></html>`;
+}
+
 const HTML_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Cache-Control": "no-cache",
@@ -203,6 +284,16 @@ export default {
     const legalM = /^\/legal\/(terms|privacy|refunds|delivery|business)\/?$/.exec(p);
     const isPage = isGet && (p === "/" || !!blog || !!offerM || !!prodM || bizM || !!legalM);
 
+    const quoteM = /^\/q\/([0-9a-f-]{36})\/?$/.exec(p);
+    if (isGet && quoteM) {
+      const key = (url.searchParams.get("k") || "").replace(/[^0-9a-f]/g, "").slice(0, 64);
+      const headers = { ...HTML_HEADERS, "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex" };
+      try {
+        const [q, c] = await Promise.all([key ? loadQuote(quoteM[1], key) : null, loadContent()]);
+        if (!q) return new Response("<!doctype html><meta charset=utf-8><title>Quotation not found</title><p style=\"font-family:sans-serif;padding:40px\">This quotation link isn't valid. Please ask us for a fresh link.</p>", { status: 404, headers });
+        return new Response(quotePage(q, c, quoteM[1], key), { headers });
+      } catch (err) { console.error(err); return new Response("Quotation temporarily unavailable. Please try again in a minute.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } }); }
+    }
     if (isGet && p === "/robots.txt") {
       try {
         const c = await loadContent();

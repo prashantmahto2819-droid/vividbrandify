@@ -122,3 +122,9 @@ One-time setup (needs Supabase access):
 1. Run `supabase/migrations/20261017_payment_links.sql` in the SQL editor (adds three columns to `orders`).
 2. Deploy the updated `store` edge function (`supabase functions deploy store --no-verify-jwt`).
 3. In Razorpay → Webhooks, also tick `payment_link.paid`, `payment_link.expired` and `payment_link.cancelled`.
+
+## 11. Quotations
+
+Admin → Sales → **Quotes**, or **Quote** on a lead, builds a quotation: line items, discount, GST added or included, validity and terms. **Save and share** gives a link (`/q/…`) to send on WhatsApp. The customer can view it, download it as PDF and **accept it online**; acceptance is recorded on the lead's timeline. From a quote you can create a payment link for the full amount or an advance (50% or 30%). Quotes sent 3+ days ago without an answer appear on the Today screen.
+
+One-time setup (needs Supabase access): run `supabase/migrations/20261017_quotes.sql` in the SQL editor. The quote page itself is part of the website and goes live with the next deploy.

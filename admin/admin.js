@@ -67,17 +67,18 @@
   const NAV = [
     ["", [["today", "Today"], ["dashboard", "Dashboard"]]],
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
-    ["Store", [["bizcrt"], ["products"], ["orders", "Orders"], ["payments", "Payments & email"]]],
+    ["Sales", [["quotes", "Quotes"], ["orders", "Orders"], ["payments", "Payments & email"]]],
+    ["Store", [["bizcrt"], ["products"]]],
     ["Layout", [["sections"]]],
     ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
     ["Site", [["settings"], ["legal"], ["theme"], ["seo"]]],
     ["Advanced", [["code"], ["media", "Media library"], ["account", "Account & backup"]]],
   ];
   const isStaff = () => !!(S.user && S.user.role === "staff");
-  const STAFF_NAV = [["", [["today", "Today"], ["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
-  const STAFF_VIEWS = ["today", "dashboard", "leads", "orders", "account"];
+  const STAFF_NAV = [["", [["today", "Today"], ["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["quotes", "Quotes"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
+  const STAFF_VIEWS = ["today", "dashboard", "leads", "quotes", "orders", "account"];
   const labelOf = v => (isStaff() && v === "account") ? "My account" : baseLabel(v);
-  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ today: "Today", dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
+  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ today: "Today", quotes: "Quotes", dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
 
   function renderShell() {
     const newLeads = S.leads.filter(l => l.status === "new").length;
@@ -111,6 +112,7 @@
     if (S.view === "account") return renderAccount(c);
     if (S.view === "automation") return renderAutomation(c);
     if (S.view === "orders") return renderOrders(c);
+    if (S.view === "quotes") return renderQuotes(c);
     if (S.view === "payments") return renderPayments(c);
     if (sc) {
       if (!S.draft) S.draft = clone(S.content[S.view]);
@@ -124,6 +126,7 @@
     S.view = v; S.sel = null; S.draft = null; S.dirty = false; S.pendingDel = null; closeLead();
     if (v === "dashboard") { S.dash = await api("GET", "dashboard").catch(() => S.dash); S.leads = await api("GET", "leads").catch(() => S.leads); }
     if (v === "today") S.leads = await api("GET", "leads").catch(() => S.leads);
+    if (v === "quotes" || v === "today") S.quotes = await api("GET", "quotes").catch(() => S.quotes || []);
     if (v === "leads") S.leads = await api("GET", "leads").catch(() => S.leads);
     if (v === "orders" || v === "dashboard" || v === "today") { S.orders = await api("GET", "orders").catch(() => S.orders); S.payments = await api("GET", "order-payments").catch(() => S.payments); }
     renderShell();
@@ -426,9 +429,12 @@
       else if (o.status === "active" && o.next_charge_at && Date.parse(o.next_charge_at) < week) money.push({ o, kind: "renewal", why: "Renews " + dayName(String(o.next_charge_at).slice(0, 10)) });
     });
     const plan = leads.filter(l => !l.followUpOn && !replyIds.has(l.id) && l.stage !== "new" && !quiet.some(q => q.id === l.id));
-    return { reply, follow, quiet, money, plan, tomorrow: leads.filter(l => l.followUpOn === addDays(1)).length };
+    const qAge = q => Math.floor((Date.now() - Date.parse(q.updated_at || q.created_at)) / 864e5);
+    const quotes = (S.quotes || []).filter(q => q.status === "sent" && !qExpired(q) && qAge(q) >= 3 && !skip.has("Q" + q.id) && (scope === "all" || q.created_by === S.user.id || (q.lead_id && S.leads.some(l => l.id === q.lead_id && mineOnly(l)))))
+      .map(q => Object.assign({ age: qAge(q) }, q)).sort((a, b) => Number(b.total) - Number(a.total));
+    return { reply, follow, quiet, money, quotes, plan, tomorrow: leads.filter(l => l.followUpOn === addDays(1)).length };
   }
-  function todayCount() { if (!S.leads) return 0; const x = todayLists(); return x.reply.length + x.follow.length + x.money.length + x.quiet.length; }
+  function todayCount() { if (!S.leads) return 0; const x = todayLists(); return x.reply.length + x.follow.length + x.money.length + x.quiet.length + x.quotes.length; }
   function waMsg(kind, name, what, extra) {
     const brand = (S.content.settings || {}).brand || "us", n = firstName(name);
     const T = {
@@ -439,6 +445,7 @@
       halted: "Hi " + n + ", this is " + brand + ". The renewal payment for " + what + " didn't go through. Could you check your card or UPI? We're happy to help.",
       renewal: "Hi " + n + ", a quick reminder from " + brand + ": your " + what + " plan renews on " + extra + ". Reply here if you need any changes.",
       link: "Hi " + n + ", a gentle reminder from " + brand + " about the payment for " + what + ". Here is the link again: " + extra,
+      quote: "Hi " + n + ", " + brand + " here. Did you get a chance to look at the quotation for " + what + "? Happy to adjust anything. Here it is again: " + extra,
     };
     return T[kind];
   }
@@ -464,8 +471,8 @@
   }
   function renderToday(c) {
     const x = todayLists(), t = todayStr(), name = firstName(S.user.name) || "there", scope = todayScope();
-    const total = x.reply.length + x.follow.length + x.money.length + x.quiet.length;
-    const parts = [[x.reply.length, "repl", "y", "ies"], [x.follow.length, "follow-up", "", "s"], [x.money.length, "payment", "", "s"], [x.quiet.length, "quiet deal", "", "s"]].filter(p => p[0]).map(p => '<b>' + p[0] + '</b> ' + p[1] + (p[0] === 1 ? p[2] : p[3]));
+    const total = x.reply.length + x.follow.length + x.money.length + x.quiet.length + x.quotes.length;
+    const parts = [[x.reply.length, "repl", "y", "ies"], [x.follow.length, "follow-up", "", "s"], [x.money.length, "payment", "", "s"], [x.quiet.length, "quiet deal", "", "s"], [x.quotes.length, "quote", "", "s"]].filter(p => p[0]).map(p => '<b>' + p[0] + '</b> ' + p[1] + (p[0] === 1 ? p[2] : p[3]));
     c.classList.add("dash");
     c.innerHTML = '<div class="d-hero t-hero"><div><span class="d-date">' + new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) + '</span><h2>' + greeting() + ', ' + esc(name) + '</h2><p>' +
         (total ? total + ' thing' + (total === 1 ? '' : 's') + ' to do today: ' + parts.join(", ") + '.' : "Nothing waiting for you today.") + '</p></div>' +
@@ -478,6 +485,9 @@
         tGroup("money", "Payments", "Unpaid links and checkouts, failed renewals and plans renewing this week.", x.money,
           x.money.map(m => { const o = m.o; return '<li class="t-row" data-torow="' + o.id + '"><span class="t-av t-av-o">₹</span><div class="t-main"><b class="t-name">' + esc(o.customer_name) + '</b><span class="t-chip ' + (m.kind === "renewal" ? "ok" : m.kind === "halted" ? "bad" : "warn") + '">' + esc(m.why) + '</span><span class="t-val">' + inr(o.total_amount || o.price) + '</span><p>' + esc([o.product_name + (o.plan_name ? " – " + o.plan_name : ""), o.business, o.order_no].filter(Boolean).join(" · ")) + '</p></div>' +
             '<div class="t-acts">' + tAct(o.id, o.phone, m.kind, o.customer_name, o.product_name, m.kind === "renewal" ? dayName(String(o.next_charge_at).slice(0, 10)) : m.kind === "link" ? o.pay_link_url : "", "") + '<button class="btn btn-s btn-sm" data-tskip="o' + o.id + '">Done for today</button></div></li>'; })) +
+        tGroup("quotes", "Quotes waiting", "Quotes sent 3 or more days ago with no answer yet, biggest first. A short nudge often closes them.", x.quotes,
+          x.quotes.map(q => { const cu = q.customer || {}; return '<li class="t-row" data-tqrow="' + q.id + '"><span class="t-av t-av-o">Q</span><div class="t-main"><button class="t-name" data-tquote="' + q.id + '">' + esc(cu.business || cu.name) + '</button><span class="t-chip warn">Sent ' + q.age + ' days ago</span><span class="t-val">' + inr(q.total) + '</span><p>' + esc([q.quote_no, (q.items || []).map(i => i.name).join(", ")].filter(Boolean).join(" · ")) + '</p></div>' +
+            '<div class="t-acts">' + tAct(q.id, cu.phone, "quote", cu.name, (q.items || [])[0] ? q.items[0].name : "your project", quoteUrl(q), q.lead_id || "") + '<button class="btn btn-s btn-sm" data-tquote="' + q.id + '">Open</button><button class="btn btn-g btn-sm" data-tskip="Q' + q.id + '">Skip</button></div></li>'; })) +
         tGroup("quiet", "Deals going quiet", "Qualified deals with no follow-up planned for 4 days or more, biggest first.", x.quiet,
           x.quiet.map(l => tRow(l, STAGE_LABEL[l.stage] + " · quiet " + l.quietDays + " days", "warn", "quiet", '<button class="btn btn-s btn-sm" data-tsnooze="' + l.id + '" data-days="1">Follow up tomorrow</button><button class="btn btn-g btn-sm" data-tskip="q' + l.id + '">Skip</button>'))) +
         (total ? '' : '<div class="card t-clear"><span aria-hidden="true">✓</span><h2>All clear</h2><p class="help">No replies, follow-ups or payments are waiting. Plan the next few days from the list on the right.</p></div>') +
@@ -494,6 +504,7 @@
     const b = e.target.closest("button"); if (!b) return;
     const d = b.dataset, row = b.closest(".t-row");
     const gone = () => { if (row) { row.classList.add("t-gone"); setTimeout(() => { if (S.view === "today") { renderToday(document.getElementById("content")); refreshNavCount(); } }, 260); } else if (S.view === "today") { renderToday(document.getElementById("content")); refreshNavCount(); } };
+    if (d.tquote) return openQuote((S.quotes || []).find(q => q.id === d.tquote));
     if (d.tmore) { S.todayOpen = Object.assign({}, S.todayOpen, { [d.tmore]: !(S.todayOpen || {})[d.tmore] }); renderToday(document.getElementById("content")); return; }
     if (d.tscope) { try { localStorage.setItem("vb_today_scope", d.tscope); } catch (_) {} renderToday(document.getElementById("content")); refreshNavCount(); return; }
     if (d.tskip) { dismiss(d.tskip); toast("Hidden for today."); return gone(); }
@@ -564,7 +575,7 @@
           (svc.length ? '<div class="pl-chips">' + svc.map(s => '<button type="button" data-pldesc="' + esc(s) + '">' + esc(s) + '</button>').join("") + '</div>' : '') + '</div>' +
         '<div class="two"><div class="fld"><label for="plAmt">Amount (₹)</label><input type="number" id="plAmt" required min="1" max="1000000" step="1" inputmode="decimal" value="' + esc(pre.amount || "") + '"></div>' +
         '<div class="fld"><label for="plDays">Link valid for</label><select id="plDays"><option value="3">3 days</option><option value="7" selected>7 days</option><option value="15">15 days</option><option value="30">30 days</option></select></div></div>' +
-        (gst ? '<fieldset class="fld pl-gst"><legend>GST (' + gst.rate + '%)</legend><label class="chk"><input type="radio" name="plGst" value="add" checked><span>Add GST on top</span></label><label class="chk"><input type="radio" name="plGst" value="included"><span>Amount already includes GST</span></label><label class="chk"><input type="radio" name="plGst" value="none"><span>No GST <span class="hint">e.g. reimbursing a domain you bought for them</span></span></label></fieldset>' +
+        (gst ? '<fieldset class="fld pl-gst"><legend>GST (' + gst.rate + '%)</legend><label class="chk"><input type="radio" name="plGst" value="add"' + (!pre.gst || pre.gst === "add" ? " checked" : "") + '><span>Add GST on top</span></label><label class="chk"><input type="radio" name="plGst" value="included"' + (pre.gst === "included" ? " checked" : "") + '><span>Amount already includes GST</span></label><label class="chk"><input type="radio" name="plGst" value="none"' + (pre.gst === "none" ? " checked" : "") + '><span>No GST <span class="hint">e.g. reimbursing a domain you bought for them</span></span></label></fieldset>' +
           '<div class="two"><div class="fld"><label for="plGstin">Customer GSTIN <small>for a B2B invoice</small></label><input type="text" id="plGstin" maxlength="15" value="' + esc(pre.gstin || "") + '" placeholder="22ABCDE1234F1Z5"></div>' +
           '<div class="fld"><label for="plState">Customer\'s state</label><select id="plState">' + Object.entries(STATES).map(([k, v]) => '<option value="' + k + '"' + (k === (pre.state || home) ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select></div></div>' : '') +
         '<div class="pl-sum" id="plSum" aria-live="polite"></div>' +
@@ -619,6 +630,162 @@
     if (!confirm("Cancel this payment link? The customer won't be able to pay with it any more.")) return;
     try { await api("POST", "pay-link-cancel", { orderNo }); S.orders = await api("GET", "orders").catch(() => S.orders); toast("Link cancelled."); renderView(); } catch (err) { toast(err.message, true); }
   }
+
+
+  /* ---------- quotations: build, share as a link the customer can print or accept, turn into a payment link ---------- */
+  const Q_ST = { draft: ["Draft", "off"], sent: ["Sent", "warn"], accepted: ["Accepted", "live"], declined: ["Declined", "bad"] };
+  const DEFAULT_TERMS = "Prices are in Indian Rupees.\nPayment: 50% advance to start the work, balance before going live.\nTimelines start once we receive the advance and your content.\nThird-party costs (ad spend, WhatsApp charges, domain, hosting) are billed separately unless listed above.";
+  const quoteTerms = () => { try { return localStorage.getItem("vb_quote_terms") || DEFAULT_TERMS; } catch (_) { return DEFAULT_TERMS; } };
+  const quoteUrl = q => String((S.content.seo || {}).siteUrl || location.origin).replace(/\/$/, "") + "/q/" + q.id + "?k=" + q.view_key;
+  const qExpired = q => q.valid_until && q.valid_until < todayStr();
+  function quoteWa(q) {
+    const brand = (S.content.settings || {}).brand || "us", cu = q.customer || {};
+    return "https://wa.me/" + waNum(cu.phone) + "?text=" + encodeURIComponent("Hi " + firstName(cu.name) + ", here is your quotation " + q.quote_no + " from " + brand + " for " + inr(q.total) + ".\n\nView, download or accept it here: " + quoteUrl(q) + (q.valid_until ? "\nValid till " + new Date(q.valid_until + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "long" }) + "." : ""));
+  }
+  function qTotals(d, gst) {
+    const sub = d.items.reduce((a, it) => a + Math.round((Number(it.qty) || 0) * (Number(it.rate) || 0)), 0);
+    const net = Math.max(sub - (d.discount || 0), 0), r = gst && d.gst_mode !== "none" ? gst.rate : 0;
+    const taxable = !r ? net : d.gst_mode === "included" ? Math.round(net * 100 / (100 + r)) : net, total = !r ? net : d.gst_mode === "included" ? net : net + Math.round(net * r / 100);
+    const tax = total - taxable, same = !d.buyer_state || !gst || d.buyer_state === gst.seller_state;
+    return { sub, taxable, total, tax, r, same, cgst: same ? Math.floor(tax / 2) : 0, sgst: same ? tax - Math.floor(tax / 2) : 0, igst: same ? 0 : tax };
+  }
+  function renderQuotes(c) {
+    const f = S.quoteFilter || (S.quoteFilter = { q: "", status: "" }), Q = S.quotes || [], q = f.q.toLowerCase();
+    const rows = Q.filter(x => (!f.status || x.status === f.status) && (!q || [x.quote_no, (x.customer || {}).name, (x.customer || {}).business, (x.customer || {}).phone].join(" ").toLowerCase().includes(q)));
+    const m0 = todayStr().slice(0, 7), open = Q.filter(x => x.status === "sent" && !qExpired(x)), won = Q.filter(x => x.status === "accepted" && String(x.accepted_at || "").slice(0, 7) === m0);
+    const decided = Q.filter(x => x.status === "accepted" || x.status === "declined").length;
+    c.innerHTML = '<div class="d-kpis">' +
+      '<div class="card d-kpi tone-a">' + ico("send") + '<span class="d-kl">Waiting for an answer</span><b>' + inr(open.reduce((a, x) => a + Number(x.total), 0)) + '</b><span class="d-delta flat">' + open.length + ' open quote' + (open.length === 1 ? '' : 's') + '</span></div>' +
+      '<div class="card d-kpi tone-c">' + ico("trophy") + '<span class="d-kl">Accepted this month</span><b>' + inr(won.reduce((a, x) => a + Number(x.total), 0)) + '</b><span class="d-delta flat">' + won.length + ' quote' + (won.length === 1 ? '' : 's') + '</span></div>' +
+      '<div class="card d-kpi tone-b">' + ico("chart") + '<span class="d-kl">Acceptance rate</span><b>' + (decided ? pct(Q.filter(x => x.status === "accepted").length, decided) + '%' : '–') + '</b><span class="d-delta flat">Of quotes accepted or declined</span></div></div>' +
+      '<div class="filters"><input type="search" id="qq" placeholder="Search quote, customer, phone…" value="' + esc(f.q) + '" aria-label="Search quotes"><select id="qst" aria-label="Filter by status"><option value="">All quotes</option>' + Object.entries(Q_ST).map(([k, v]) => '<option value="' + k + '"' + (f.status === k ? " selected" : "") + '>' + v[0] + '</option>').join("") + '</select><span class="help">' + rows.length + ' of ' + Q.length + '</span><span style="flex:1"></span><button class="btn btn-p btn-sm" data-act="newquote">+ New quote</button></div>' +
+      (rows.length ? '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Quote</th><th>Customer</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>' + rows.map(x => {
+        const cu = x.customer || {}, s = qExpired(x) && x.status === "sent" ? ["Expired", "off"] : Q_ST[x.status] || [x.status, "off"];
+        return '<tr data-openq="' + x.id + '" class="q-row"><td>' + new Date(x.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</td><td><b style="font-family:var(--mono);font-size:13px">' + esc(x.quote_no) + '</b><div class="sub">' + (x.items || []).length + ' item' + ((x.items || []).length === 1 ? '' : 's') + '</div></td>' +
+          '<td><b>' + esc(cu.business || cu.name) + '</b>' + (cu.business ? '<div class="sub">' + esc(cu.name) + '</div>' : '') + '<div class="sub">' + esc(cu.phone || "") + '</div></td><td><b>' + inr(x.total) + '</b>' + (Number(x.gst_rate) ? '<div class="sub">incl. GST</div>' : '') + '</td>' +
+          '<td><span class="tagp ' + s[1] + '">' + s[0] + '</span>' + (x.valid_until && x.status === "sent" ? '<div class="sub">till ' + new Date(x.valid_until + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + '</div>' : '') + '</td>' +
+          '<td class="q-acts">' + (x.status !== "draft" && cu.phone ? '<a class="btn btn-s btn-sm" target="_blank" rel="noopener" href="' + esc(quoteWa(x)) + '">WhatsApp</a>' : '') + '<button class="btn btn-g btn-sm" data-openq="' + x.id + '">Open</button></td></tr>';
+      }).join("") + '</tbody></table></div>' : '<div class="empty">' + (Q.length ? 'No quotes match this filter.' : 'No quotes yet. Create one here or from a lead with the Quote button, then share it on WhatsApp. Customers can view, download and accept it online.') + '</div>');
+    const fq = document.getElementById("qq"), fs = document.getElementById("qst");
+    fq.oninput = () => { f.q = fq.value; renderQuotes(c); const n = document.getElementById("qq"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
+    fs.onchange = () => { f.status = fs.value; renderQuotes(c); };
+    c.onclick = e => { const b = e.target.closest("[data-openq]"); if (b && !e.target.closest("a")) openQuote((S.quotes || []).find(x => x.id === b.dataset.openq)); };
+  }
+  async function openQuote(q, pre) {
+    if (!S.storeStatus) S.storeStatus = await api("GET", "store-status").catch(() => ({}));
+    const gst = S.storeStatus.gst;
+    pre = pre || {};
+    const d = q ? JSON.parse(JSON.stringify(q)) : { status: "draft", lead_id: pre.leadId || null, customer: { name: pre.name || "", phone: pre.phone || "", email: pre.email || "", business: pre.business || "", city: pre.city || "", gstin: "" },
+      items: [{ name: pre.service || "", description: "", qty: 1, rate: pre.amount ? Math.round(pre.amount * 100) : 0 }], discount: 0, gst_mode: gst ? "add" : "none", buyer_state: gst ? gst.seller_state : "", notes: "", terms: quoteTerms(), valid_until: addDays(15) };
+    if (!d.items.length) d.items.push({ name: "", description: "", qty: 1, rate: 0 });
+    const names = [...new Set((S.content.services || []).map(v => v.name).concat((S.content.products || []).map(p => p.name)).filter(Boolean))];
+    const m = document.createElement("div"); m.className = "modal";
+    const locked = () => d.status === "accepted";
+    const rs2 = p => (Number(p || 0) / 100).toString();
+    const draw = () => {
+      const t = qTotals(d, gst), saved = !!d.id, st = qExpired(d) && d.status === "sent" ? ["Expired", "off"] : Q_ST[d.status];
+      m.innerHTML = '<div class="box q-box" role="dialog" aria-modal="true" aria-labelledby="qTitle"><header><h2 id="qTitle">' + (saved ? 'Quotation ' + esc(d.quote_no) : 'New quotation') + '</h2>' + (saved ? '<span class="tagp ' + st[1] + '">' + st[0] + '</span>' : '') + '<button class="btn btn-g btn-sm" data-x>Close</button></header>' +
+        '<div class="q-grid"><div class="q-main">' +
+          '<section><h3>Customer</h3><div class="q-two">' +
+            [["name", "Name"], ["phone", "Mobile"], ["business", "Business"], ["email", "Email"], ["city", "City"], ["gstin", "GSTIN (optional)"]].map(([k, l]) => '<div class="fld"><label for="qc_' + k + '">' + l + '</label><input type="text" id="qc_' + k + '" data-qc="' + k + '" value="' + esc(d.customer[k] || "") + '"' + (locked() ? " disabled" : "") + '></div>').join("") +
+            (gst ? '<div class="fld"><label for="q_state">State (place of supply)</label><select id="q_state" data-qf="buyer_state"' + (locked() ? " disabled" : "") + '>' + Object.entries(STATES).map(([k, v]) => '<option value="' + k + '"' + (k === d.buyer_state ? " selected" : "") + '>' + esc(v) + '</option>').join("") + '</select></div>' : '') +
+          '</div></section>' +
+          '<section><h3>Items</h3><datalist id="qNames">' + names.map(n => '<option value="' + esc(n) + '">').join("") + '</datalist><div class="q-items">' +
+            d.items.map((it, i) => '<div class="q-item"><div class="fld q-name"><label for="qi_n' + i + '">Item</label><input type="text" id="qi_n' + i + '" list="qNames" data-qi="' + i + '" data-k="name" value="' + esc(it.name) + '" placeholder="e.g. Business website"' + (locked() ? " disabled" : "") + '></div>' +
+              '<div class="fld q-qty"><label for="qi_q' + i + '">Qty</label><input type="number" id="qi_q' + i + '" min="0" step="any" data-qi="' + i + '" data-k="qty" value="' + esc(it.qty) + '"' + (locked() ? " disabled" : "") + '></div>' +
+              '<div class="fld q-rate"><label for="qi_r' + i + '">Rate (₹)</label><input type="number" id="qi_r' + i + '" min="0" step="any" data-qi="' + i + '" data-k="rate" value="' + esc(rs2(it.rate)) + '"' + (locked() ? " disabled" : "") + '></div>' +
+              '<div class="q-amt" data-amt="' + i + '">' + inr(Math.round((Number(it.qty) || 0) * (Number(it.rate) || 0))) + '</div>' +
+              (locked() ? '' : '<button type="button" class="ib q-del" data-qdel="' + i + '" aria-label="Remove item"' + (d.items.length < 2 ? " disabled" : "") + '>✕</button>') +
+              '<div class="fld q-desc"><textarea rows="2" data-qi="' + i + '" data-k="description" aria-label="Item details" placeholder="Details: pages, features, number of posts, timeline…"' + (locked() ? " disabled" : "") + '>' + esc(it.description || "") + '</textarea></div></div>').join("") +
+            '</div>' + (locked() ? '' : '<button type="button" class="btn btn-s btn-sm" data-qadd>+ Add item</button>') + '</section>' +
+          '<section><h3>Notes and terms</h3><div class="fld"><label for="q_notes">Notes for the customer <small>optional</small></label><textarea id="q_notes" rows="2" data-qf="notes" placeholder="e.g. Includes 2 rounds of changes"' + (locked() ? " disabled" : "") + '>' + esc(d.notes || "") + '</textarea></div>' +
+            '<div class="fld"><label for="q_terms">Terms</label><textarea id="q_terms" rows="4" data-qf="terms"' + (locked() ? " disabled" : "") + '>' + esc(d.terms || "") + '</textarea><span class="hint">Your changes here become the starting terms for your next quote.</span></div></section>' +
+        '</div><aside class="q-side"><div class="q-sum card">' +
+          '<div class="q-line"><span>Subtotal</span><b>' + inr(t.sub) + '</b></div>' +
+          '<div class="q-line"><label for="q_disc">Discount (₹)</label><input type="number" id="q_disc" min="0" step="any" data-qf="discount" value="' + esc(rs2(d.discount)) + '"' + (locked() ? " disabled" : "") + '></div>' +
+          (gst ? '<fieldset class="q-gst"' + (locked() ? " disabled" : "") + '><legend>GST ' + gst.rate + '%</legend>' + [["add", "Add on top"], ["included", "Included in rates"], ["none", "No GST"]].map(([k, l]) => '<label class="chk"><input type="radio" name="qgst" value="' + k + '"' + (d.gst_mode === k ? " checked" : "") + '><span>' + l + '</span></label>').join("") + '</fieldset>' : '') +
+          (t.tax ? (t.same ? '<div class="q-line sm"><span>CGST ' + t.r / 2 + '%</span><span>' + inr(t.cgst) + '</span></div><div class="q-line sm"><span>SGST ' + t.r / 2 + '%</span><span>' + inr(t.sgst) + '</span></div>' : '<div class="q-line sm"><span>IGST ' + t.r + '%</span><span>' + inr(t.igst) + '</span></div>') : '') +
+          '<div class="q-line q-tot"><span>Total</span><b>' + inr(t.total) + '</b></div>' +
+          '<div class="fld"><label for="q_valid">Valid till</label><input type="date" id="q_valid" data-qf="valid_until" value="' + esc(d.valid_until || "") + '"' + (locked() ? " disabled" : "") + '></div>' +
+          '<div class="q-err" id="qErr" role="alert"></div>' +
+          (locked() ? '' : '<div class="q-btns"><button class="btn btn-p" data-qsave="sent">' + (d.status === "draft" ? 'Save and share' : 'Save changes') + '</button>' + (d.status === "draft" ? '<button class="btn btn-g" data-qsave="draft">Save draft</button>' : '') + '</div>') +
+        '</div>' +
+        (saved && d.status !== "draft" ? '<div class="card q-share"><h3>Share</h3><div class="pl-url"><input type="text" readonly value="' + esc(quoteUrl(d)) + '" aria-label="Quote link" id="qUrl"><button class="btn btn-s btn-sm" data-copy="' + esc(quoteUrl(d)) + '">Copy</button></div>' +
+          '<div class="q-btns">' + (d.customer.phone ? '<a class="btn btn-p btn-sm" target="_blank" rel="noopener" href="' + esc(quoteWa(d)) + '" data-qshared>' + IC.wa + ' Send on WhatsApp</a>' : '') + '<a class="btn btn-g btn-sm" target="_blank" rel="noopener" href="' + esc(quoteUrl(d)) + '">Open / PDF</a></div>' +
+          '<h3>Next step</h3><div class="q-btns">' + (d.status !== "accepted" ? '<button class="btn btn-s btn-sm" data-qmark="accepted">Mark accepted</button>' : '') + (d.status === "sent" ? '<button class="btn btn-g btn-sm" data-qmark="declined">Declined</button>' : '') + '</div>' +
+          '<div class="q-pay"><label for="qPct">Ask for payment</label><div class="q-btns"><select id="qPct"><option value="100">Full amount</option><option value="50"' + (d.status === "accepted" ? " selected" : "") + '>50% advance</option><option value="30">30% advance</option></select><button class="btn btn-s btn-sm" data-qpay>Create payment link</button></div></div></div>' : '') +
+        '</aside></div></div>';
+    };
+    const amtRefresh = () => {
+      const t = qTotals(d, gst); d.items.forEach((it, i) => { const el = m.querySelector('[data-amt="' + i + '"]'); if (el) el.textContent = inr(Math.round((Number(it.qty) || 0) * (Number(it.rate) || 0))); });
+      const side = m.querySelector(".q-sum"); if (!side) return;
+      const keep = document.activeElement && document.activeElement.id; const pos = keep && document.activeElement.selectionStart;
+      draw(); if (keep) { const el = m.querySelector("#" + keep); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (_) {} } }
+      void t;
+    };
+    draw(); document.body.appendChild(m);
+    const close = () => { m.remove(); document.removeEventListener("keydown", onKey); if (S.view === "quotes") renderView(); };
+    const onKey = e => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    m.addEventListener("input", e => {
+      const el = e.target;
+      if (el.dataset.qc) { d.customer[el.dataset.qc] = el.value; if (el.dataset.qc === "gstin" && /^\d{2}/.test(el.value) && STATES[el.value.slice(0, 2)] && gst) { d.buyer_state = el.value.slice(0, 2); amtRefresh(); } return; }
+      if (el.dataset.qi) { const it = d.items[+el.dataset.qi], k = el.dataset.k; it[k] = k === "rate" ? Math.round((Number(el.value) || 0) * 100) : k === "qty" ? (el.value === "" ? "" : Number(el.value)) : el.value; if (k === "qty" || k === "rate") amtRefresh(); return; }
+      if (el.dataset.qf) { const k = el.dataset.qf; d[k] = k === "discount" ? Math.round((Number(el.value) || 0) * 100) : el.value; if (k === "discount") amtRefresh(); }
+    });
+    m.addEventListener("change", e => {
+      if (e.target.name === "qgst") { d.gst_mode = e.target.value; amtRefresh(); }
+      if (e.target.dataset.qf === "buyer_state") { d.buyer_state = e.target.value; amtRefresh(); }
+    });
+    m.addEventListener("click", async e => {
+      if (e.target === m || e.target.closest("[data-x]")) return close();
+      const b = e.target.closest("button, a"); if (!b) return;
+      if (b.dataset.copy) { (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.copy) : Promise.reject()).then(() => toast("Link copied.")).catch(() => toast("Select the link and copy it.", true)); return; }
+      if (b.hasAttribute("data-qadd")) { d.items.push({ name: "", description: "", qty: 1, rate: 0 }); draw(); const n = m.querySelector("#qi_n" + (d.items.length - 1)); if (n) n.focus(); return; }
+      if (b.dataset.qdel) { d.items.splice(+b.dataset.qdel, 1); draw(); return; }
+      if (b.hasAttribute("data-qshared")) { if (d.lead_id) api("POST", "lead-activity", { leadId: d.lead_id, kind: "whatsapp", detail: "Shared quote " + d.quote_no + " on WhatsApp" }).catch(() => {}); return; }
+      if (b.dataset.qmark) {
+        try { const up = await api("PATCH", "quotes/" + d.id, { status: b.dataset.qmark }); Object.assign(d, up); syncQuote(up); if (d.lead_id) api("POST", "lead-activity", { leadId: d.lead_id, kind: "note", detail: "Quote " + d.quote_no + " " + b.dataset.qmark }).catch(() => {}); toast("Marked " + b.dataset.qmark + "."); draw(); } catch (err) { toast(err.message, true); }
+        return;
+      }
+      if (b.hasAttribute("data-qpay")) {
+        const p = +m.querySelector("#qPct").value / 100, cu = d.customer;
+        const base = d.gst_mode === "add" ? Number(d.taxable) : Number(d.total);
+        close();
+        return openPayLink({ name: cu.name, phone: cu.phone, email: cu.email, business: cu.business, gstin: cu.gstin, state: d.buyer_state, gst: Number(d.gst_rate) ? d.gst_mode : "none", leadId: d.lead_id || "",
+          description: "Quotation " + d.quote_no + (p < 1 ? " – " + Math.round(p * 100) + "% advance" : ""), amount: Math.round(base * p) / 100 });
+      }
+      if (b.dataset.qsave) {
+        const err = m.querySelector("#qErr"); err.textContent = "";
+        const cu = d.customer, items = d.items.filter(it => String(it.name).trim() && Number(it.qty) > 0);
+        if (!String(cu.name || "").trim()) { err.textContent = "Add the customer's name."; return m.querySelector("#qc_name").focus(); }
+        if (!items.length) { err.textContent = "Add at least one item with a quantity."; return; }
+        if (cu.gstin && !/^[0-9]{2}[A-Z0-9]{13}$/i.test(cu.gstin.trim())) { err.textContent = "That GSTIN doesn't look right. It has 15 characters."; return; }
+        const status = d.status === "draft" ? b.dataset.qsave : d.status;
+        const body = { status, customer: Object.fromEntries(Object.entries(cu).map(([k, v]) => [k, String(v || "").trim().slice(0, 160)])), items: items.map(it => ({ name: String(it.name).trim().slice(0, 160), description: String(it.description || "").trim().slice(0, 600), qty: Number(it.qty), rate: Math.max(0, Math.round(Number(it.rate) || 0)) })),
+          discount: Math.max(0, d.discount || 0), gst_mode: gst ? d.gst_mode : "none", gst_rate: gst ? gst.rate : 0, seller_state: gst ? gst.seller_state : "", buyer_state: gst ? d.buyer_state || "" : "", valid_until: d.valid_until || null, notes: String(d.notes || "").slice(0, 2000), terms: String(d.terms || "").slice(0, 4000), lead_id: d.lead_id || null };
+        body.customer.gstin = (body.customer.gstin || "").toUpperCase();
+        b.disabled = true;
+        try {
+          const wasDraft = !d.id || d.status === "draft";
+          const out = d.id ? await api("PATCH", "quotes/" + d.id, body) : await api("POST", "quotes", body);
+          Object.assign(d, out); d.items = out.items.length ? out.items : d.items; syncQuote(out);
+          try { localStorage.setItem("vb_quote_terms", body.terms); } catch (_) {}
+          if (out.status === "sent" && wasDraft && out.lead_id) {
+            const l = S.leads.find(x => x.id === out.lead_id);
+            api("POST", "lead-activity", { leadId: out.lead_id, kind: "note", detail: "Quote " + out.quote_no + " sent: " + inr(out.total) }).catch(() => {});
+            if (l) patchLead(l.id, Object.assign(["new", "contacted", "qualified"].includes(l.stage) ? { stage: "proposal" } : {}, l.dealValue ? {} : { dealValue: Math.round(out.total / 100) }, l.followUpOn ? {} : { followUpOn: addDays(3) }));
+          }
+          toast(out.status === "draft" ? "Draft saved." : wasDraft ? "Quote saved. Share it with the customer." : "Changes saved.");
+          draw();
+        } catch (er) {
+          err.textContent = er.status === 404 || /quotes/.test(er.message) && /exist|schema|relation/i.test(er.message) ? "Quotes need a one-time database update before they can be saved. Ask your developer to run the quotes migration." : er.message;
+          b.disabled = false;
+        }
+      }
+    });
+  }
+  function syncQuote(q) { S.quotes = S.quotes || []; const i = S.quotes.findIndex(x => x.id === q.id); if (i < 0) S.quotes.unshift(q); else S.quotes[i] = q; }
 
   /* ---------- store: orders ---------- */
   const inr = p => "₹" + (Number(p || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -895,7 +1062,7 @@
     d.innerHTML = '<header class="dr-head"><div><span class="prio p-' + l.priority + '">' + PRIO[l.priority] + ' · ' + l.score + '</span><h2>' + esc(l.name) + '</h2><p>' + esc([l.business, l.businessType, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</p></div><button class="ib" data-dr="close" aria-label="Close">✕</button></header>' +
       '<div class="dr-body">' +
         (w ? '<div class="dr-alert' + (w.late ? " late" : "") + '">⏱ Waiting ' + w.txt + ' for a first reply' + (w.late ? ' · past your ' + slaMin() + '-minute target' : '') + '</div>' : l.firstResponseAt ? '<div class="dr-ok">✓ First reply in ' + replyTime(l) + '</div>' : '') +
-        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + (l.phone ? '<button class="btn btn-s btn-sm" data-dr="pay">₹ Request payment</button>' : '') + '</div>' +
+        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + '<button class="btn btn-s btn-sm" data-dr="quote">Quote</button>' + (l.phone ? '<button class="btn btn-s btn-sm" data-dr="pay">₹ Request payment</button>' : '') + '</div>' +
         '<div class="dr-grid">' +
           field("Stage", '<select data-df="stage">' + STAGES.map(([k, v]) => '<option value="' + k + '"' + (k === l.stage ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
           field("Priority", '<select data-df="priority">' + Object.entries(PRIO).map(([k, v]) => '<option value="' + k + '"' + (k === l.priority ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
@@ -914,6 +1081,7 @@
     d.onclick = async e => {
       const b = e.target.closest("[data-dr],[data-log]"); if (!b) return;
       if (b.dataset.dr === "close") return closeLead();
+      if (b.dataset.dr === "quote") { if (!S.quotes) S.quotes = await api("GET", "quotes").catch(() => []); return openQuote(null, { name: l.name, phone: l.phone, email: l.email, business: l.business, city: l.city, service: l.service, leadId: l.id }); }
       if (b.dataset.dr === "pay") return openPayLink({ name: l.name, phone: l.phone, email: l.email, business: l.business, description: l.service ? l.service + " – " : "", amount: l.dealValue || "", leadId: l.id });
       if (b.dataset.log) { logActivity(l.id, b.dataset.log, b.dataset.log === "whatsapp" ? "Opened WhatsApp chat" : b.dataset.log === "call" ? "Called" : "Emailed", true); return; }
       if (b.dataset.dr === "log") { const t = document.getElementById("actText"); await logActivity(l.id, document.getElementById("actKind").value, t.value.trim() || "", false); t.value = ""; }
@@ -1220,6 +1388,7 @@
     if (d.act === "message") return openMessenger();
     if (d.act === "ocsv") return exportOrders();
     if (d.act === "paylink") return openPayLink();
+    if (d.act === "newquote") return openQuote(null);
     if (d.plcancel) return cancelLink(d.plcancel);
     if (d.act === "gstcsv") return exportGst();
     if (d.act === "savepay") return savePayments();
