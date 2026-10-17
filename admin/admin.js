@@ -7,7 +7,7 @@
   const clone = o => JSON.parse(JSON.stringify(o));
   const TICK = '<svg viewBox="0 0 18 11"><path d="M1 6l3.5 3.5L11 2"/><path d="M7 9.5L15.5 1"/></svg>';
 
-  const S = { user: null, schema: null, content: null, view: "dashboard", sel: null, draft: null, dirty: false, leads: [], media: [], dash: null, pendingDel: null, leadFilter: { q: "", status: "", stage: "", type: "", service: "", priority: "", owner: "" } };
+  const S = { user: null, schema: null, content: null, view: "today", sel: null, draft: null, dirty: false, leads: [], media: [], dash: null, pendingDel: null, leadFilter: { q: "", status: "", stage: "", type: "", service: "", priority: "", owner: "" } };
 
   /* ---------- API ---------- */
   async function api(method, path, body) {
@@ -65,7 +65,7 @@
 
   /* ---------- shell ---------- */
   const NAV = [
-    ["", [["dashboard", "Dashboard"]]],
+    ["", [["today", "Today"], ["dashboard", "Dashboard"]]],
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
     ["Store", [["bizcrt"], ["products"], ["orders", "Orders"], ["payments", "Payments & email"]]],
     ["Layout", [["sections"]]],
@@ -74,15 +74,15 @@
     ["Advanced", [["code"], ["media", "Media library"], ["account", "Account & backup"]]],
   ];
   const isStaff = () => !!(S.user && S.user.role === "staff");
-  const STAFF_NAV = [["", [["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
-  const STAFF_VIEWS = ["dashboard", "leads", "orders", "account"];
+  const STAFF_NAV = [["", [["today", "Today"], ["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
+  const STAFF_VIEWS = ["today", "dashboard", "leads", "orders", "account"];
   const labelOf = v => (isStaff() && v === "account") ? "My account" : baseLabel(v);
-  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
+  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ today: "Today", dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
 
   function renderShell() {
     const newLeads = S.leads.filter(l => l.status === "new").length;
     app.innerHTML = '<div class="shell"><aside class="side" id="side"><div class="brandmark"><img class="mark-img" src="/assets/brand/favicon.png" alt="" width="36" height="36">' + esc((S.content.settings.brand || "Vivid Brandify")) + '</div>' +
-      (isStaff() ? STAFF_NAV : NAV).map(([g, items]) => (g ? '<div class="grp">' + g + '</div>' : '') + items.map(([k, l]) => '<button data-nav="' + k + '" class="' + (S.view === k ? "on" : "") + '">' + esc(l || labelOf(k)) + (k === "leads" && newLeads ? '<span class="n">' + newLeads + '</span>' : '') + '</button>').join("")).join("") +
+      (isStaff() ? STAFF_NAV : NAV).map(([g, items]) => (g ? '<div class="grp">' + g + '</div>' : '') + items.map(([k, l]) => '<button data-nav="' + k + '" class="' + (S.view === k ? "on" : "") + '">' + esc(l || labelOf(k)) + (k === "leads" && newLeads ? '<span class="n">' + newLeads + '</span>' : '') + (k === "today" && todayCount() ? '<span class="n">' + todayCount() + '</span>' : '') + '</button>').join("")).join("") +
       '<div class="spacer"></div><div class="me">Signed in as ' + esc(S.user.email) + '<br><span class="pill" style="margin-top:6px;display:inline-block">' + (isStaff() ? "Staff" : "Admin") + '</span></div><button data-act="logout">Sign out</button></aside>' +
       '<div class="main"><div class="topbar"><button class="btn btn-g btn-sm menu-t" data-act="menu">Menu</button><h1>' + esc(labelOf(S.view)) + '</h1><div class="sp"></div><a class="btn btn-g btn-sm" id="viewSite" href="' + previewHref() + '" target="_blank" rel="noopener">View site ↗</a></div>' +
       '<div class="content" id="content"></div></div></div>' + '<div id="savebarSlot"></div>';
@@ -101,9 +101,10 @@
 
   function renderView() {
     const c = document.getElementById("content");
-    if (isStaff() && !STAFF_VIEWS.includes(S.view)) S.view = "dashboard";
+    if (isStaff() && !STAFF_VIEWS.includes(S.view)) S.view = "today";
     document.getElementById("savebarSlot").innerHTML = "";
     const sc = S.schema[S.view];
+    if (S.view === "today") return renderToday(c);
     if (S.view === "dashboard") return renderDashboard(c);
     if (S.view === "leads") return renderLeads(c);
     if (S.view === "media") return renderMedia(c);
@@ -122,8 +123,9 @@
     if (S.dirty && !(await confirmLeave())) return;
     S.view = v; S.sel = null; S.draft = null; S.dirty = false; S.pendingDel = null; closeLead();
     if (v === "dashboard") { S.dash = await api("GET", "dashboard").catch(() => S.dash); S.leads = await api("GET", "leads").catch(() => S.leads); }
+    if (v === "today") S.leads = await api("GET", "leads").catch(() => S.leads);
     if (v === "leads") S.leads = await api("GET", "leads").catch(() => S.leads);
-    if (v === "orders" || v === "dashboard") { S.orders = await api("GET", "orders").catch(() => S.orders); S.payments = await api("GET", "order-payments").catch(() => S.payments); }
+    if (v === "orders" || v === "dashboard" || v === "today") { S.orders = await api("GET", "orders").catch(() => S.orders); S.payments = await api("GET", "order-payments").catch(() => S.payments); }
     renderShell();
     window.scrollTo(0, 0);
   }
@@ -262,6 +264,7 @@
     send: '<svg viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>',
     gift: '<svg viewBox="0 0 24 24"><path d="M3 9h18v4H3zM5 13h14v8H5zM12 9v12M12 9C9 9 7 4 10 4s2 5 2 5 0-5 2-5 1 5-2 5"/></svg>',
     edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>',
+    phone: '<svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>',
     wa: '<svg viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.5 2 2.5 4 4.5 4.5l1.2-1.2 2 1-.5 1.7c-3.6.4-7.6-3.6-7.2-7.2l1.7-.5 1 2z"/></svg>',
   };
   const ico = k => '<span class="d-ic" aria-hidden="true">' + IC[k] + '</span>';
@@ -390,6 +393,130 @@
     if (!list.length) return "";
     return '<div class="card reply-now"><div class="d-card-h"><h2>Reply now</h2><span class="tagp ' + (s.late ? "bad" : "warn") + '">' + s.waiting.length + '</span></div><p class="help" style="font-size:13px;margin:-6px 0 10px">Leads answered within minutes are far more likely to convert.</p><div class="check">' +
       list.map(l => { const w = waitInfo(l); return '<div><span class="lc-wait' + (w.late ? " late" : "") + '">⏱ ' + w.txt + '</span><span style="flex:1;min-width:0"><b>' + esc(l.name) + '</b> · ' + esc(l.service) + '</span>' + (l.phone ? '<button class="btn btn-p btn-sm" data-quickwa="' + l.id + '">WhatsApp</button>' : '<button class="btn btn-g btn-sm" data-openlead="' + l.id + '">Open</button>') + '</div>'; }).join("") + '</div></div>';
+  }
+
+  /* ---------- Today: the day's work in one list (replies, follow-ups, payments, quiet deals) ---------- */
+  const OPEN_STAGES = ["new", "contacted", "qualified", "proposal", "negotiation"];
+  const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return dayKey(d); };
+  const dayName = k => new Date(k + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  const firstName = s => String(s || "").trim().split(/\s+/)[0] || "";
+  function todayScope() { try { return localStorage.getItem("vb_today_scope") || (isStaff() ? "mine" : "all"); } catch (_) { return isStaff() ? "mine" : "all"; } }
+  function dismissed() { try { return JSON.parse(localStorage.getItem("vb_today_skip_" + todayStr()) || "[]"); } catch (_) { return []; } }
+  function dismiss(key) { try { const d = dismissed(); d.push(key); localStorage.setItem("vb_today_skip_" + todayStr(), JSON.stringify(d)); } catch (_) {} }
+  function mineOnly(l) { return l.ownerId === S.user.id || (!l.ownerId && l.stage === "new"); }
+  function todayLists() {
+    const t = todayStr(), skip = new Set(dismissed()), scope = todayScope();
+    const leads = S.leads.filter(l => OPEN_STAGES.includes(l.stage) && (scope === "all" || mineOnly(l)));
+    // fresh enquiries (under 2 days) first, oldest of those first so nobody waits; older unanswered ones after, newest first
+    const fresh = l => Date.now() - Date.parse(l.createdAt) < 2 * 864e5;
+    const reply = leads.filter(l => waitInfo(l)).sort((a, b) => (fresh(b) - fresh(a)) || (fresh(a) ? Date.parse(a.createdAt) - Date.parse(b.createdAt) : Date.parse(b.createdAt) - Date.parse(a.createdAt)));
+    const replyIds = new Set(reply.map(l => l.id));
+    const follow = leads.filter(l => !replyIds.has(l.id) && l.followUpOn && l.followUpOn <= t).sort((a, b) => a.followUpOn.localeCompare(b.followUpOn) || ({ hot: 0, warm: 1, cold: 2 })[a.priority] - ({ hot: 0, warm: 1, cold: 2 })[b.priority]);
+    const quietDays = l => Math.floor((Date.now() - Date.parse(l.stageChangedAt || l.createdAt)) / 864e5);
+    const quiet = leads.filter(l => ["qualified", "proposal", "negotiation"].includes(l.stage) && !l.followUpOn && quietDays(l) >= 4 && !skip.has("q" + l.id))
+      .sort((a, b) => (b.dealValue || 0) - (a.dealValue || 0) || quietDays(b) - quietDays(a)).map(l => Object.assign({ quietDays: quietDays(l) }, l));
+    const orders = S.orders || [], week = Date.now() + 7 * 864e5;
+    const money = [];
+    orders.forEach(o => {
+      if (skip.has("o" + o.id)) return;
+      const age = Date.now() - Date.parse(o.created_at);
+      if (o.status === "created" && age > 30 * 6e4 && age < 7 * 864e5 && o.phone) money.push({ o, kind: "unpaid", why: "Checkout not finished · " + ago(o.created_at) });
+      else if (o.status === "halted") money.push({ o, kind: "halted", why: "Renewal payment failed" });
+      else if (o.status === "active" && o.next_charge_at && Date.parse(o.next_charge_at) < week) money.push({ o, kind: "renewal", why: "Renews " + dayName(String(o.next_charge_at).slice(0, 10)) });
+    });
+    const plan = leads.filter(l => !l.followUpOn && !replyIds.has(l.id) && l.stage !== "new" && !quiet.some(q => q.id === l.id));
+    return { reply, follow, quiet, money, plan, tomorrow: leads.filter(l => l.followUpOn === addDays(1)).length };
+  }
+  function todayCount() { if (!S.leads) return 0; const x = todayLists(); return x.reply.length + x.follow.length + x.money.length + x.quiet.length; }
+  function waMsg(kind, name, what, extra) {
+    const brand = (S.content.settings || {}).brand || "us", n = firstName(name);
+    const T = {
+      reply: "Hi " + n + ", this is " + brand + ". Thanks for your enquiry about " + (what || "our services") + ". When is a good time to talk?",
+      follow: "Hi " + n + ", " + brand + " here, following up on " + (what || "your enquiry") + ". Is now a good time to talk?",
+      quiet: "Hi " + n + ", just checking in on the " + (what || "proposal") + " we shared. Happy to answer any questions or adjust it for you.",
+      unpaid: "Hi " + n + ", this is " + brand + ". Your order for " + what + " wasn't completed. Can I help you finish it, or answer any questions?",
+      halted: "Hi " + n + ", this is " + brand + ". The renewal payment for " + what + " didn't go through. Could you check your card or UPI? We're happy to help.",
+      renewal: "Hi " + n + ", a quick reminder from " + brand + ": your " + what + " plan renews on " + extra + ". Reply here if you need any changes.",
+    };
+    return T[kind];
+  }
+  function tAct(id, phone, kind, name, what, extra, logId) {
+    if (!phone) return '';
+    return '<a class="ib t-call" href="tel:' + esc(phone) + '" data-tlog="' + esc(logId || "") + '" data-tkind="call" aria-label="Call ' + esc(name) + '" title="Call">' + IC.phone + '</a>' +
+      '<a class="ib t-wa" href="https://wa.me/' + waNum(phone) + '?text=' + encodeURIComponent(waMsg(kind, name, what, extra)) + '" target="_blank" rel="noopener" data-tlog="' + esc(logId || "") + '" data-tkind="whatsapp" aria-label="WhatsApp ' + esc(name) + '" title="WhatsApp with a ready message">' + IC.wa + '</a>';
+  }
+  function tRow(l, chip, tone, kind, extraBtns) {
+    const ctx = [l.service, l.business, l.city].filter(Boolean).join(" · ");
+    return '<li class="t-row" data-trow="' + l.id + '"><button class="t-av p-' + l.priority + '" data-openlead="' + l.id + '" aria-label="Open ' + esc(l.name) + '">' + esc(initials(l.name)) + '</button>' +
+      '<div class="t-main"><button class="t-name" data-openlead="' + l.id + '">' + esc(l.name) + '</button><span class="t-chip ' + tone + '">' + chip + '</span>' + (l.dealValue ? '<span class="t-val">' + rs(l.dealValue) + '</span>' : '') +
+      '<p>' + esc(ctx || leadSource(l)) + (l.nextAction ? ' <b>Next: ' + esc(l.nextAction) + '</b>' : '') + '</p></div>' +
+      '<div class="t-acts">' + tAct(l.id, l.phone, kind, l.name, l.service, "", l.id) + (extraBtns || '') + '</div></li>';
+  }
+  const snoozeBtns = id => '<span class="t-snz" role="group" aria-label="Move follow-up"><button data-tsnooze="' + id + '" data-days="1">Tomorrow</button><button data-tsnooze="' + id + '" data-days="3">3 days</button><button data-tsnooze="' + id + '" data-days="7">Next week</button></span>';
+  const T_SHOW = 6;
+  function tGroup(key, title, why, items, rows) {
+    if (!items.length) return '';
+    const open = (S.todayOpen || {})[key], shown = open ? rows : rows.slice(0, T_SHOW);
+    return '<section class="card t-group tg-' + key + '"><header><h2>' + title + '</h2><span class="t-count">' + items.length + '</span><p>' + why + '</p></header><ol class="t-list">' + shown.join("") + '</ol>' +
+      (rows.length > T_SHOW ? '<button class="btn btn-g btn-sm t-more" data-tmore="' + key + '">' + (open ? 'Show fewer' : 'Show all ' + rows.length) + '</button>' : '') + '</section>';
+  }
+  function renderToday(c) {
+    const x = todayLists(), t = todayStr(), name = firstName(S.user.name) || "there", scope = todayScope();
+    const total = x.reply.length + x.follow.length + x.money.length + x.quiet.length;
+    const parts = [[x.reply.length, "repl", "y", "ies"], [x.follow.length, "follow-up", "", "s"], [x.money.length, "payment", "", "s"], [x.quiet.length, "quiet deal", "", "s"]].filter(p => p[0]).map(p => '<b>' + p[0] + '</b> ' + p[1] + (p[0] === 1 ? p[2] : p[3]));
+    c.classList.add("dash");
+    c.innerHTML = '<div class="d-hero t-hero"><div><span class="d-date">' + new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) + '</span><h2>' + greeting() + ', ' + esc(name) + '</h2><p>' +
+        (total ? total + ' thing' + (total === 1 ? '' : 's') + ' to do today: ' + parts.join(", ") + '.' : "Nothing waiting for you today.") + '</p></div>' +
+        '<div class="t-scope" role="group" aria-label="Whose work"><button data-tscope="mine" aria-pressed="' + (scope === "mine") + '">My work</button><button data-tscope="all" aria-pressed="' + (scope === "all") + '">Everyone</button></div></div>' +
+      '<div class="t-layout"><div class="t-col">' +
+        tGroup("reply", "Reply now", "New enquiries without a first reply. Leads answered within minutes are far more likely to buy.", x.reply,
+          x.reply.map(l => { const w = waitInfo(l), old = w.m >= 2880; return tRow(l, old ? "No reply for " + w.txt.replace("d", " days") : w.m < 1 ? "Just now" : "Waiting " + w.txt, old ? "warn" : w.late ? "bad" : "warn", "reply", '<button class="btn btn-s btn-sm" data-treplied="' + l.id + '">Replied</button>'); })) +
+        tGroup("follow", "Follow-ups", "Calls and messages you planned for today or earlier.", x.follow,
+          x.follow.map(l => { const late = l.followUpOn < t, d = Math.round((Date.parse(t) - Date.parse(l.followUpOn)) / 864e5); return tRow(l, late ? (d === 1 ? "1 day overdue" : d + " days overdue") : "Today", late ? "bad" : "ok", "follow", '<button class="btn btn-p btn-sm" data-tdone="' + l.id + '">Done</button>' + snoozeBtns(l.id)); })) +
+        tGroup("money", "Payments", "Unfinished checkouts, failed renewals and plans renewing this week.", x.money,
+          x.money.map(m => { const o = m.o; return '<li class="t-row" data-torow="' + o.id + '"><span class="t-av t-av-o">₹</span><div class="t-main"><b class="t-name">' + esc(o.customer_name) + '</b><span class="t-chip ' + (m.kind === "renewal" ? "ok" : m.kind === "halted" ? "bad" : "warn") + '">' + esc(m.why) + '</span><span class="t-val">' + inr(o.total_amount || o.price) + '</span><p>' + esc([o.product_name + (o.plan_name ? " – " + o.plan_name : ""), o.business, o.order_no].filter(Boolean).join(" · ")) + '</p></div>' +
+            '<div class="t-acts">' + tAct(o.id, o.phone, m.kind, o.customer_name, o.product_name, m.kind === "renewal" ? dayName(String(o.next_charge_at).slice(0, 10)) : "", "") + '<button class="btn btn-s btn-sm" data-tskip="o' + o.id + '">Done for today</button></div></li>'; })) +
+        tGroup("quiet", "Deals going quiet", "Qualified deals with no follow-up planned for 4 days or more, biggest first.", x.quiet,
+          x.quiet.map(l => tRow(l, STAGE_LABEL[l.stage] + " · quiet " + l.quietDays + " days", "warn", "quiet", '<button class="btn btn-s btn-sm" data-tsnooze="' + l.id + '" data-days="1">Follow up tomorrow</button><button class="btn btn-g btn-sm" data-tskip="q' + l.id + '">Skip</button>'))) +
+        (total ? '' : '<div class="card t-clear"><span aria-hidden="true">✓</span><h2>All clear</h2><p class="help">No replies, follow-ups or payments are waiting. Plan the next few days from the list on the right.</p></div>') +
+      '</div><aside class="t-col t-side">' +
+        '<div class="card"><h2>Plan ahead</h2><p class="help" style="font-size:13.5px">' + (x.tomorrow ? '<b>' + x.tomorrow + '</b> follow-up' + (x.tomorrow === 1 ? '' : 's') + ' tomorrow. ' : '') + (x.plan.length ? 'These open leads have no follow-up date, so they could slip through.' : 'Every open lead has a next follow-up date.') + '</p>' +
+          (x.plan.length ? '<ul class="t-plan">' + x.plan.slice(0, 6).map(l => '<li><button class="t-name" data-openlead="' + l.id + '">' + esc(l.name) + '</button><small>' + esc(STAGE_LABEL[l.stage]) + (l.service ? ' · ' + esc(l.service) : '') + '</small><button class="btn btn-g btn-sm" data-tsnooze="' + l.id + '" data-days="1">Tomorrow</button></li>').join("") + '</ul>' + (x.plan.length > 6 ? '<button class="btn btn-g btn-sm" data-nav="leads">See all ' + x.plan.length + ' in Leads</button>' : '') : '') + '</div>' +
+        '<div class="card t-tips"><h2>Shortcuts</h2><p class="help" style="font-size:13.5px">The WhatsApp button opens a chat with a ready message for that situation. Calls and messages are added to the lead\'s timeline automatically.</p><div class="t-links"><button class="btn btn-s btn-sm" data-nav="leads">All leads</button><button class="btn btn-s btn-sm" data-act="message">Message leads</button>' + (isStaff() ? '' : '<button class="btn btn-s btn-sm" data-nav="orders">Orders</button>') + '</div></div>' +
+      '</aside></div>';
+    c.onclick = todayClick;
+  }
+  async function todayClick(e) {
+    const a = e.target.closest("[data-tkind]");
+    if (a) { const id = a.dataset.tlog; if (id) api("POST", "lead-activity", { leadId: id, kind: a.dataset.tkind, detail: a.dataset.tkind === "call" ? "Called from Today" : "WhatsApp from Today" }).then(() => api("GET", "leads")).then(f => { if (f) { S.leads = f; } }).catch(err => toast(err.message, true)); return; }
+    const b = e.target.closest("button"); if (!b) return;
+    const d = b.dataset, row = b.closest(".t-row");
+    const gone = () => { if (row) { row.classList.add("t-gone"); setTimeout(() => { if (S.view === "today") { renderToday(document.getElementById("content")); refreshNavCount(); } }, 260); } else if (S.view === "today") { renderToday(document.getElementById("content")); refreshNavCount(); } };
+    if (d.tmore) { S.todayOpen = Object.assign({}, S.todayOpen, { [d.tmore]: !(S.todayOpen || {})[d.tmore] }); renderToday(document.getElementById("content")); return; }
+    if (d.tscope) { try { localStorage.setItem("vb_today_scope", d.tscope); } catch (_) {} renderToday(document.getElementById("content")); refreshNavCount(); return; }
+    if (d.tskip) { dismiss(d.tskip); toast("Hidden for today."); return gone(); }
+    if (d.tsnooze) {
+      b.disabled = true; const day = addDays(+d.days);
+      const l = await patchLead(d.tsnooze, { followUpOn: day }); if (!l) { b.disabled = false; return; }
+      api("POST", "lead-activity", { leadId: d.tsnooze, kind: "task", detail: "Follow-up moved to " + dayName(day) }).catch(() => {});
+      toast("Follow-up set for " + dayName(day) + "."); return gone();
+    }
+    if (d.tdone) {
+      b.disabled = true;
+      const l = await patchLead(d.tdone, { followUpOn: "" }); if (!l) { b.disabled = false; return; }
+      api("POST", "lead-activity", { leadId: d.tdone, kind: "task", detail: "Follow-up done" }).catch(() => {});
+      toast("Done. Set the next follow-up from Plan ahead when you're ready."); return gone();
+    }
+    if (d.treplied) {
+      b.disabled = true;
+      try { await api("POST", "lead-activity", { leadId: d.treplied, kind: "note", detail: "First reply sent" }); await patchLead(d.treplied, { stage: "contacted" }); } catch (err) { b.disabled = false; return toast(err.message, true); }
+      toast("Moved to Contacted."); return gone();
+    }
+  }
+  function refreshNavCount() {
+    const btn = document.querySelector('.side [data-nav="today"]'); if (!btn) return;
+    const n = todayCount(), badge = btn.querySelector(".n");
+    if (n && badge) badge.textContent = n; else if (n) btn.insertAdjacentHTML("beforeend", '<span class="n">' + n + '</span>'); else if (badge) badge.remove();
   }
   function renderDashboard(c) {
     const staff = isStaff(), s = leadStats();
