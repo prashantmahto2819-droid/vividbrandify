@@ -181,6 +181,14 @@
         };
       }
 
+      case "GET projects": return (await req("/rest/v1/projects?select=*&order=created_at.desc&limit=500")) || [];
+      case "POST projects": { const out = await req("/rest/v1/projects", { method: "POST", body, headers: { Prefer: "return=representation" } }); return out[0]; }
+      case "PATCH projects": { const out = await req("/rest/v1/projects?id=eq." + encodeURIComponent(id), { method: "PATCH", body, headers: { Prefer: "return=representation" } }); if (!out.length) throw new ApiError(404, "Project not found"); return out[0]; }
+      case "DELETE projects": { const out = await req("/rest/v1/projects?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: { Prefer: "return=representation" } }); if (!out || !out.length) throw new ApiError(403, "Only admins can remove projects."); return { ok: true }; }
+      case "GET renewals": return (await req("/rest/v1/renewals?select=*&order=renew_on.asc&limit=1000")) || [];
+      case "POST renewals": { const out = await req("/rest/v1/renewals", { method: "POST", body, headers: { Prefer: "return=representation" } }); return out[0]; }
+      case "PATCH renewals": { const out = await req("/rest/v1/renewals?id=eq." + encodeURIComponent(id), { method: "PATCH", body, headers: { Prefer: "return=representation" } }); if (!out.length) throw new ApiError(404, "Renewal not found"); return out[0]; }
+      case "DELETE renewals": { const out = await req("/rest/v1/renewals?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: { Prefer: "return=representation" } }); if (!out || !out.length) throw new ApiError(403, "Only admins can remove renewals."); return { ok: true }; }
       case "GET quotes": return (await req("/rest/v1/quotes?select=*&order=created_at.desc&limit=500")) || [];
       case "POST quotes": { const out = await req("/rest/v1/quotes", { method: "POST", body, headers: { Prefer: "return=representation" } }); return out[0]; }
       case "PATCH quotes": { const out = await req("/rest/v1/quotes?id=eq." + encodeURIComponent(id), { method: "PATCH", body, headers: { Prefer: "return=representation" } }); if (!out.length) throw new ApiError(404, "Quote not found"); return out[0]; }

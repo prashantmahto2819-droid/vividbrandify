@@ -128,3 +128,11 @@ One-time setup (needs Supabase access):
 Admin → Sales → **Quotes**, or **Quote** on a lead, builds a quotation: line items, discount, GST added or included, validity and terms. **Save and share** gives a link (`/q/…`) to send on WhatsApp. The customer can view it, download it as PDF and **accept it online**; acceptance is recorded on the lead's timeline. From a quote you can create a payment link for the full amount or an advance (50% or 30%). Quotes sent 3+ days ago without an answer appear on the Today screen.
 
 One-time setup (needs Supabase access): run `supabase/migrations/20261017_quotes.sql` in the SQL editor. The quote page itself is part of the website and goes live with the next deploy.
+
+## 12. Projects and renewals
+
+Admin → Work → **Projects**: once a deal is won, press **Start project** on the lead or on the accepted quote. The project gets ready-made steps for its service (website, CRM/app, WhatsApp campaign, voice, video, chatbot, marketing), an owner, a due date and a progress bar. Drag cards between Not started, In progress, Client review and Done. **Send update on WhatsApp** tells the client how far along the work is and what comes next. Steps due today or overdue, and projects past their due date, appear on the Today screen.
+
+Admin → Work → **Renewals**: add each client's domain, hosting, AMC, SSL or software plan with its renewal date and price (and your cost, to see your margin). Renewals show on Today 15 days ahead with a ready WhatsApp reminder and a payment link; **Renewed** moves the date on by a month, a quarter or a year.
+
+Database: `supabase/migrations/20261018_projects_renewals.sql` (applied on 18 Oct 2026, along with the payment link and quote migrations).

@@ -60,7 +60,7 @@
   async function loadAll() {
     const [schema, content, leads, media, dash, orders, payments] = await Promise.all([api("GET", "schema"), api("GET", "content"), api("GET", "leads"), api("GET", "media"), api("GET", "dashboard"), api("GET", "orders").catch(() => []), api("GET", "order-payments").catch(() => [])]);
     Object.assign(S, { schema, content, leads, media, dash, orders, payments });
-    [S.team, S.crm] = await Promise.all([api("GET", "team-directory").catch(() => []), api("GET", "crm-settings").catch(() => ({}))]);
+    [S.team, S.crm, S.quotes, S.projects, S.renewals] = await Promise.all([api("GET", "team-directory").catch(() => []), api("GET", "crm-settings").catch(() => ({})), api("GET", "quotes").catch(() => []), api("GET", "projects").catch(() => []), api("GET", "renewals").catch(() => [])]);
   }
 
   /* ---------- shell ---------- */
@@ -68,6 +68,7 @@
     ["", [["today", "Today"], ["dashboard", "Dashboard"]]],
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
     ["Sales", [["quotes", "Quotes"], ["orders", "Orders"], ["payments", "Payments & email"]]],
+    ["Work", [["projects", "Projects"], ["renewals", "Renewals"]]],
     ["Store", [["bizcrt"], ["products"]]],
     ["Layout", [["sections"]]],
     ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
@@ -75,10 +76,10 @@
     ["Advanced", [["code"], ["media", "Media library"], ["account", "Account & backup"]]],
   ];
   const isStaff = () => !!(S.user && S.user.role === "staff");
-  const STAFF_NAV = [["", [["today", "Today"], ["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["quotes", "Quotes"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
-  const STAFF_VIEWS = ["today", "dashboard", "leads", "quotes", "orders", "account"];
+  const STAFF_NAV = [["", [["today", "Today"], ["dashboard", "Dashboard"]]], ["Work", [["leads", "Leads"], ["quotes", "Quotes"], ["projects", "Projects"], ["renewals", "Renewals"], ["orders", "Orders"]]], ["You", [["account", "My account"]]]];
+  const STAFF_VIEWS = ["today", "dashboard", "leads", "quotes", "projects", "renewals", "orders", "account"];
   const labelOf = v => (isStaff() && v === "account") ? "My account" : baseLabel(v);
-  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ today: "Today", quotes: "Quotes", dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
+  const baseLabel = v => (S.schema[v] && S.schema[v].label) || ({ today: "Today", quotes: "Quotes", projects: "Projects", renewals: "Renewals", dashboard: "Dashboard", leads: "Leads", media: "Media library", account: "Account & backup", widget: "WhatsApp chat widget", automation: "WhatsApp automation", orders: "Orders", payments: "Payments & email" })[v] || v;
 
   function renderShell() {
     const newLeads = S.leads.filter(l => l.status === "new").length;
@@ -113,6 +114,8 @@
     if (S.view === "automation") return renderAutomation(c);
     if (S.view === "orders") return renderOrders(c);
     if (S.view === "quotes") return renderQuotes(c);
+    if (S.view === "projects") return renderProjects(c);
+    if (S.view === "renewals") return renderRenewals(c);
     if (S.view === "payments") return renderPayments(c);
     if (sc) {
       if (!S.draft) S.draft = clone(S.content[S.view]);
@@ -127,6 +130,8 @@
     if (v === "dashboard") { S.dash = await api("GET", "dashboard").catch(() => S.dash); S.leads = await api("GET", "leads").catch(() => S.leads); }
     if (v === "today") S.leads = await api("GET", "leads").catch(() => S.leads);
     if (v === "quotes" || v === "today") S.quotes = await api("GET", "quotes").catch(() => S.quotes || []);
+    if (v === "projects" || v === "today") S.projects = await api("GET", "projects").catch(() => S.projects || []);
+    if (v === "renewals" || v === "today") S.renewals = await api("GET", "renewals").catch(() => S.renewals || []);
     if (v === "leads") S.leads = await api("GET", "leads").catch(() => S.leads);
     if (v === "orders" || v === "dashboard" || v === "today") { S.orders = await api("GET", "orders").catch(() => S.orders); S.payments = await api("GET", "order-payments").catch(() => S.payments); }
     renderShell();
@@ -432,9 +437,18 @@
     const qAge = q => Math.floor((Date.now() - Date.parse(q.updated_at || q.created_at)) / 864e5);
     const quotes = (S.quotes || []).filter(q => q.status === "sent" && !qExpired(q) && qAge(q) >= 3 && !skip.has("Q" + q.id) && (scope === "all" || q.created_by === S.user.id || (q.lead_id && S.leads.some(l => l.id === q.lead_id && mineOnly(l)))))
       .map(q => Object.assign({ age: qAge(q) }, q)).sort((a, b) => Number(b.total) - Number(a.total));
-    return { reply, follow, quiet, money, quotes, plan, tomorrow: leads.filter(l => l.followUpOn === addDays(1)).length };
+    const myWork = p => scope === "all" || p.owner_id === S.user.id || (!p.owner_id && p.created_by === S.user.id);
+    const work = [];
+    (S.projects || []).filter(p => ["todo", "doing", "review"].includes(p.status) && myWork(p)).forEach(p => {
+      (p.tasks || []).forEach(x => { if (!x.done && x.due && x.due <= t && !skip.has("T" + p.id + x.id)) work.push({ p, x, due: x.due }); });
+      if (pOverdue(p) && !skip.has("P" + p.id)) work.push({ p, due: p.due_on });
+    });
+    work.sort((a, b) => a.due.localeCompare(b.due));
+    const lim = addDays(15);
+    const renew = (S.renewals || []).filter(r => r.status === "active" && r.renew_on <= lim && !skip.has("R" + r.id) && (scope === "all" || r.created_by === S.user.id || (r.lead_id && S.leads.some(l => l.id === r.lead_id && mineOnly(l))))).sort((a, b) => a.renew_on.localeCompare(b.renew_on));
+    return { reply, follow, quiet, money, quotes, work, renew, plan, tomorrow: leads.filter(l => l.followUpOn === addDays(1)).length };
   }
-  function todayCount() { if (!S.leads) return 0; const x = todayLists(); return x.reply.length + x.follow.length + x.money.length + x.quiet.length + x.quotes.length; }
+  function todayCount() { if (!S.leads) return 0; const x = todayLists(); return x.reply.length + x.follow.length + x.money.length + x.quiet.length + x.quotes.length + x.work.length + x.renew.length; }
   function waMsg(kind, name, what, extra) {
     const brand = (S.content.settings || {}).brand || "us", n = firstName(name);
     const T = {
@@ -471,8 +485,8 @@
   }
   function renderToday(c) {
     const x = todayLists(), t = todayStr(), name = firstName(S.user.name) || "there", scope = todayScope();
-    const total = x.reply.length + x.follow.length + x.money.length + x.quiet.length + x.quotes.length;
-    const parts = [[x.reply.length, "repl", "y", "ies"], [x.follow.length, "follow-up", "", "s"], [x.money.length, "payment", "", "s"], [x.quiet.length, "quiet deal", "", "s"], [x.quotes.length, "quote", "", "s"]].filter(p => p[0]).map(p => '<b>' + p[0] + '</b> ' + p[1] + (p[0] === 1 ? p[2] : p[3]));
+    const total = x.reply.length + x.follow.length + x.money.length + x.quiet.length + x.quotes.length + x.work.length + x.renew.length;
+    const parts = [[x.reply.length, "repl", "y", "ies"], [x.follow.length, "follow-up", "", "s"], [x.money.length, "payment", "", "s"], [x.quiet.length, "quiet deal", "", "s"], [x.quotes.length, "quote", "", "s"], [x.work.length, "project step", "", "s"], [x.renew.length, "renewal", "", "s"]].filter(p => p[0]).map(p => '<b>' + p[0] + '</b> ' + p[1] + (p[0] === 1 ? p[2] : p[3]));
     c.classList.add("dash");
     c.innerHTML = '<div class="d-hero t-hero"><div><span class="d-date">' + new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }) + '</span><h2>' + greeting() + ', ' + esc(name) + '</h2><p>' +
         (total ? total + ' thing' + (total === 1 ? '' : 's') + ' to do today: ' + parts.join(", ") + '.' : "Nothing waiting for you today.") + '</p></div>' +
@@ -488,6 +502,12 @@
         tGroup("quotes", "Quotes waiting", "Quotes sent 3 or more days ago with no answer yet, biggest first. A short nudge often closes them.", x.quotes,
           x.quotes.map(q => { const cu = q.customer || {}; return '<li class="t-row" data-tqrow="' + q.id + '"><span class="t-av t-av-o">Q</span><div class="t-main"><button class="t-name" data-tquote="' + q.id + '">' + esc(cu.business || cu.name) + '</button><span class="t-chip warn">Sent ' + q.age + ' days ago</span><span class="t-val">' + inr(q.total) + '</span><p>' + esc([q.quote_no, (q.items || []).map(i => i.name).join(", ")].filter(Boolean).join(" · ")) + '</p></div>' +
             '<div class="t-acts">' + tAct(q.id, cu.phone, "quote", cu.name, (q.items || [])[0] ? q.items[0].name : "your project", quoteUrl(q), q.lead_id || "") + '<button class="btn btn-s btn-sm" data-tquote="' + q.id + '">Open</button><button class="btn btn-g btn-sm" data-tskip="Q' + q.id + '">Skip</button></div></li>'; })) +
+        tGroup("work", "Project work", "Steps due today or earlier, and projects past their due date. Tick a step off here or send the client an update.", x.work,
+          x.work.map(w => { const p = w.p, late = w.due < t, d = -daysTo(w.due); return '<li class="t-row" data-tprow="' + p.id + '"><span class="t-av t-av-o">' + (w.x ? '✓' : '!') + '</span><div class="t-main"><button class="t-name" data-popen="' + p.id + '">' + esc(w.x ? w.x.title : p.name) + '</button><span class="t-chip ' + (late ? "bad" : "ok") + '">' + (w.x ? (late ? (d === 1 ? "1 day late" : d + " days late") : "Today") : (d === 1 ? "Due date passed yesterday" : "Due date passed " + d + " days ago")) + '</span><p>' + esc(w.x ? p.name + ' · ' + pClient(p) : pClient(p) + ' · ' + pProg(p).pct + '% done') + '</p></div>' +
+            '<div class="t-acts">' + (w.x ? '<button class="btn btn-p btn-sm" data-ptask="' + p.id + '|' + w.x.id + '">Done</button>' : (p.client || {}).phone ? '<a class="btn btn-s btn-sm" target="_blank" rel="noopener" href="' + esc(projectWa(p)) + '">Update client</a>' : '') + '<button class="btn btn-s btn-sm" data-popen="' + p.id + '">Open</button><button class="btn btn-g btn-sm" data-tskip="' + (w.x ? "T" + p.id + w.x.id : "P" + p.id) + '">Skip</button></div></li>'; })) +
+        tGroup("renew", "Renewals", "Domains, hosting, AMC and plans renewing in the next 15 days, or already due. Remind the client and send the payment link early.", x.renew,
+          x.renew.map(r => { const d = daysTo(r.renew_on); return '<li class="t-row" data-trrow="' + r.id + '"><span class="t-av t-av-o">↻</span><div class="t-main"><button class="t-name" data-renopen="' + r.id + '">' + esc(rName(r)) + '</button><span class="t-chip ' + (d < 0 ? "bad" : d <= 3 ? "warn" : "ok") + '">' + (d < 0 ? (-d === 1 ? "1 day overdue" : -d + " days overdue") : d === 0 ? "Renews today" : "Renews " + dayName(r.renew_on)) + '</span>' + (r.amount ? '<span class="t-val">' + inr(r.amount) + '</span>' : '') + '<p>' + esc(R_KIND[r.kind] + (r.label ? " · " + r.label : "")) + '</p></div>' +
+            '<div class="t-acts">' + ((r.client || {}).phone ? '<a class="btn btn-s btn-sm" target="_blank" rel="noopener" href="' + esc(renewalWa(r)) + '" data-renwa="' + r.id + '">Remind</a>' + (r.amount ? '<button class="btn btn-g btn-sm" data-renpay="' + r.id + '">Payment link</button>' : '') : '') + '<button class="btn btn-p btn-sm" data-rendone="' + r.id + '">Renewed</button><button class="btn btn-g btn-sm" data-tskip="R' + r.id + '">Skip</button></div></li>'; })) +
         tGroup("quiet", "Deals going quiet", "Qualified deals with no follow-up planned for 4 days or more, biggest first.", x.quiet,
           x.quiet.map(l => tRow(l, STAGE_LABEL[l.stage] + " · quiet " + l.quietDays + " days", "warn", "quiet", '<button class="btn btn-s btn-sm" data-tsnooze="' + l.id + '" data-days="1">Follow up tomorrow</button><button class="btn btn-g btn-sm" data-tskip="q' + l.id + '">Skip</button>'))) +
         (total ? '' : '<div class="card t-clear"><span aria-hidden="true">✓</span><h2>All clear</h2><p class="help">No replies, follow-ups or payments are waiting. Plan the next few days from the list on the right.</p></div>') +
@@ -499,12 +519,21 @@
     c.onclick = todayClick;
   }
   async function todayClick(e) {
+    if (e.target.closest("[data-renwa],[data-renpay],[data-rendone],[data-renopen]")) return renewalClick(e);
     const a = e.target.closest("[data-tkind]");
     if (a) { const id = a.dataset.tlog; if (id) api("POST", "lead-activity", { leadId: id, kind: a.dataset.tkind, detail: a.dataset.tkind === "call" ? "Called from Today" : "WhatsApp from Today" }).then(() => api("GET", "leads")).then(f => { if (f) { S.leads = f; } }).catch(err => toast(err.message, true)); return; }
     const b = e.target.closest("button"); if (!b) return;
     const d = b.dataset, row = b.closest(".t-row");
     const gone = () => { if (row) { row.classList.add("t-gone"); setTimeout(() => { if (S.view === "today") { renderToday(document.getElementById("content")); refreshNavCount(); } }, 260); } else if (S.view === "today") { renderToday(document.getElementById("content")); refreshNavCount(); } };
     if (d.tquote) return openQuote((S.quotes || []).find(q => q.id === d.tquote));
+    if (d.popen) return openProject((S.projects || []).find(p => p.id === d.popen));
+    if (d.ptask) {
+      const [pid, tId] = d.ptask.split("|"), p = (S.projects || []).find(x => x.id === pid); if (!p) return;
+      b.disabled = true;
+      try { const up = await api("PATCH", "projects/" + pid, { tasks: p.tasks.map(x => x.id === tId ? Object.assign({}, x, { done: true }) : x) }); syncList("projects", up); toast("Step done."); }
+      catch (er) { b.disabled = false; return toast(er.message, true); }
+      return gone();
+    }
     if (d.tmore) { S.todayOpen = Object.assign({}, S.todayOpen, { [d.tmore]: !(S.todayOpen || {})[d.tmore] }); renderToday(document.getElementById("content")); return; }
     if (d.tscope) { try { localStorage.setItem("vb_today_scope", d.tscope); } catch (_) {} renderToday(document.getElementById("content")); refreshNavCount(); return; }
     if (d.tskip) { dismiss(d.tskip); toast("Hidden for today."); return gone(); }
@@ -712,7 +741,7 @@
         '</div>' +
         (saved && d.status !== "draft" ? '<div class="card q-share"><h3>Share</h3><div class="pl-url"><input type="text" readonly value="' + esc(quoteUrl(d)) + '" aria-label="Quote link" id="qUrl"><button class="btn btn-s btn-sm" data-copy="' + esc(quoteUrl(d)) + '">Copy</button></div>' +
           '<div class="q-btns">' + (d.customer.phone ? '<a class="btn btn-p btn-sm" target="_blank" rel="noopener" href="' + esc(quoteWa(d)) + '" data-qshared>' + IC.wa + ' Send on WhatsApp</a>' : '') + '<a class="btn btn-g btn-sm" target="_blank" rel="noopener" href="' + esc(quoteUrl(d)) + '">Open / PDF</a></div>' +
-          '<h3>Next step</h3><div class="q-btns">' + (d.status !== "accepted" ? '<button class="btn btn-s btn-sm" data-qmark="accepted">Mark accepted</button>' : '') + (d.status === "sent" ? '<button class="btn btn-g btn-sm" data-qmark="declined">Declined</button>' : '') + '</div>' +
+          '<h3>Next step</h3><div class="q-btns">' + (d.status !== "accepted" ? '<button class="btn btn-s btn-sm" data-qmark="accepted">Mark accepted</button>' : '<button class="btn btn-s btn-sm" data-qproj>' + ((S.projects || []).some(p => p.quote_id === d.id) ? "Open project" : "Start project") + '</button>') + (d.status === "sent" ? '<button class="btn btn-g btn-sm" data-qmark="declined">Declined</button>' : '') + '</div>' +
           '<div class="q-pay"><label for="qPct">Ask for payment</label><div class="q-btns"><select id="qPct"><option value="100">Full amount</option><option value="50"' + (d.status === "accepted" ? " selected" : "") + '>50% advance</option><option value="30">30% advance</option></select><button class="btn btn-s btn-sm" data-qpay>Create payment link</button></div></div></div>' : '') +
         '</aside></div></div>';
     };
@@ -747,6 +776,12 @@
       if (b.dataset.qmark) {
         try { const up = await api("PATCH", "quotes/" + d.id, { status: b.dataset.qmark }); Object.assign(d, up); syncQuote(up); if (d.lead_id) api("POST", "lead-activity", { leadId: d.lead_id, kind: "note", detail: "Quote " + d.quote_no + " " + b.dataset.qmark }).catch(() => {}); toast("Marked " + b.dataset.qmark + "."); draw(); } catch (err) { toast(err.message, true); }
         return;
+      }
+      if (b.hasAttribute("data-qproj")) {
+        const it = d.items || [], cu = d.customer || {};
+        close();
+        return projectFrom({ quote_id: d.id, lead_id: d.lead_id || null, name: (it[0] ? it[0].name : "Project") + (cu.business ? " – " + cu.business : ""), service: it[0] ? it[0].name : "", client: { name: cu.name, phone: cu.phone, business: cu.business, email: cu.email },
+          value: Number(d.taxable) || 0, notes: "From quotation " + d.quote_no + ":\n" + it.map(x => "- " + x.name + (Number(x.qty) !== 1 ? " × " + x.qty : "") + (x.description ? ": " + x.description : "")).join("\n") });
       }
       if (b.hasAttribute("data-qpay")) {
         const p = +m.querySelector("#qPct").value / 100, cu = d.customer;
@@ -786,6 +821,313 @@
     });
   }
   function syncQuote(q) { S.quotes = S.quotes || []; const i = S.quotes.findIndex(x => x.id === q.id); if (i < 0) S.quotes.unshift(q); else S.quotes[i] = q; }
+
+  /* ---------- projects: the work after a deal is won (steps, owner, due date, client updates) ---------- */
+  const P_COLS = [["todo", "Not started"], ["doing", "In progress"], ["review", "Client review"], ["done", "Done"]];
+  const P_LABEL = { todo: "Not started", doing: "In progress", review: "Client review", done: "Done", hold: "On hold" };
+  const P_HINT = { todo: "Advance received, work not started", doing: "Being built or run", review: "Waiting for the client's feedback or approval", done: "Delivered in the last 30 days" };
+  const P_TPL = [
+    [/whatsapp.*software|software.*whatsapp/i, ["Account created", "WhatsApp number connected", "Contacts imported (opted-in only)", "Message templates set up", "Team trained", "First campaign sent"]],
+    [/web|landing|site|catalog/i, ["Kickoff call and requirements", "Domain and hosting ready", "Content and photos received", "Homepage design shared", "Design approved by client", "All pages built", "Forms, WhatsApp button and admin tested", "Go live", "Handover and training"]],
+    [/chatbot|\bbot\b|automation/i, ["Questions and answers collected", "Bot flow built", "Tested with real chats", "Live on website and WhatsApp", "Handover"]],
+    [/whatsapp/i, ["WhatsApp Business API account ready", "Opted-in contact list cleaned", "Message templates written", "Templates approved by WhatsApp", "Campaign scheduled", "Campaign sent", "Results report shared"]],
+    [/crm|app|software|dashboard/i, ["Requirements and workflow mapped", "Screens planned", "First version built", "Client demo", "Changes done", "Data imported", "Team trained", "Go live"]],
+    [/voice|ivr|call/i, ["Script written", "Voice recorded", "IVR menu set up", "Number list ready", "Campaign live", "Report shared"]],
+    [/video/i, ["Script and storyboard", "Voice-over recorded", "First cut shared", "Changes done", "Final video delivered"]],
+    [/seo|social|ads|marketing|digital|google/i, ["Audit and plan", "Google Business Profile updated", "Content calendar approved", "Ads set up", "First month report"]],
+  ];
+  const tid = () => Math.random().toString(36).slice(2, 10);
+  const tplFor = service => ((P_TPL.find(([re]) => re.test(service || "")) || [0, ["Kickoff call", "Work in progress", "Client review", "Delivered"]])[1]).map(title => ({ id: tid(), title, done: false, due: "" }));
+  const pProg = p => { const t = (p.tasks || []).length, d = (p.tasks || []).filter(x => x.done).length; return { t, d, pct: t ? Math.round(d / t * 100) : (p.status === "done" ? 100 : 0) }; };
+  const pClient = p => { const c = p.client || {}; return c.business || c.name || "–"; };
+  const pOverdue = p => p.due_on && p.due_on < todayStr() && p.status !== "done" && p.status !== "hold";
+  const fmtDay = k => k ? new Date(k + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "";
+  const daysTo = k => Math.round((Date.parse(k + "T00:00:00") - Date.parse(todayStr() + "T00:00:00")) / 864e5);
+  function syncList(key, row) { S[key] = S[key] || []; const i = S[key].findIndex(x => x.id === row.id); if (i < 0) S[key].unshift(row); else S[key][i] = row; }
+  const needsDb = er => er && (er.status === 404 || /projects|renewals/.test(er.message || "") && /exist|schema|relation|cache/i.test(er.message || ""));
+  const DB_MSG = "Projects and renewals need a one-time database update. Ask your developer to run the projects and renewals migration.";
+
+  function pCard(p) {
+    const g = pProg(p), o = ownerOf(p.owner_id), od = pOverdue(p), d = p.due_on ? daysTo(p.due_on) : null;
+    return '<article class="pcard' + (od ? " late" : "") + '" draggable="true" data-proj="' + p.id + '" tabindex="0" aria-label="' + esc(p.name) + ', ' + esc(P_LABEL[p.status]) + '">' +
+      '<div class="pc-client">' + esc(pClient(p)) + '</div><b class="pc-name">' + esc(p.name) + '</b>' +
+      '<div class="pc-bar" role="progressbar" aria-valuenow="' + g.pct + '" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><i style="width:' + g.pct + '%"></i></div>' +
+      '<div class="lc-foot"><span class="pc-steps">' + (g.t ? g.d + '/' + g.t + ' steps' : 'No steps yet') + '</span>' +
+        (p.due_on && p.status !== "done" ? '<span class="pc-due' + (od ? " late" : d <= 3 ? " soon" : "") + '">' + (od ? (-d === 1 ? "1 day late" : -d + " days late") : d === 0 ? "Due today" : "Due " + fmtDay(p.due_on)) + '</span>' : '') +
+        '<span style="flex:1"></span>' + (o ? '<span class="lc-own" title="' + esc(o.name) + '">' + esc(initials(o.name)) + '</span>' : '<span class="lc-own none" title="No owner">–</span>') + '</div></article>';
+  }
+  function renderProjects(c) {
+    const f = S.projFilter || (S.projFilter = { q: "", owner: "" }), P = S.projects || [], q = f.q.toLowerCase(), me = S.user.id, t = todayStr();
+    const rows = P.filter(p => (!f.owner || (f.owner === "me" ? p.owner_id === me : f.owner === "none" ? !p.owner_id : p.owner_id === f.owner)) &&
+      (!q || [p.name, p.service, (p.client || {}).name, (p.client || {}).business, (p.client || {}).phone].join(" ").toLowerCase().includes(q)));
+    const active = P.filter(p => ["todo", "doing", "review"].includes(p.status)), week = addDays(7), m0 = t.slice(0, 7);
+    const dueWeek = active.filter(p => p.due_on && p.due_on >= t && p.due_on <= week), late = active.filter(pOverdue), doneM = P.filter(p => p.status === "done" && String(p.done_at || "").slice(0, 7) === m0);
+    const recentDone = p => p.status !== "done" || Date.now() - Date.parse(p.done_at || p.updated_at) < 30 * 864e5;
+    const sortP = list => list.sort((a, b) => (pOverdue(b) - pOverdue(a)) || String(a.due_on || "9999").localeCompare(String(b.due_on || "9999")));
+    const hold = rows.filter(p => p.status === "hold");
+    c.innerHTML = '<div class="d-kpis">' +
+      '<div class="card d-kpi tone-a">' + ico("edit") + '<span class="d-kl">Active projects</span><b>' + active.length + '</b><span class="d-delta flat">' + inr(active.reduce((a, p) => a + Number(p.value || 0), 0)) + ' of work</span></div>' +
+      '<div class="card d-kpi tone-b">' + ico("bell") + '<span class="d-kl">Due this week</span><b>' + dueWeek.length + '</b><span class="d-delta flat">Next 7 days</span></div>' +
+      '<div class="card d-kpi tone-d">' + ico("send") + '<span class="d-kl">Past due date</span><b>' + late.length + '</b><span class="d-delta ' + (late.length ? "down" : "flat") + '">' + (late.length ? "Tell these clients" : "All on time") + '</span></div>' +
+      '<div class="card d-kpi tone-c">' + ico("trophy") + '<span class="d-kl">Delivered this month</span><b>' + doneM.length + '</b><span class="d-delta flat">' + inr(doneM.reduce((a, p) => a + Number(p.value || 0), 0)) + '</span></div></div>' +
+      '<div class="filters" style="margin-top:16px"><input type="search" id="pq" placeholder="Search project, client, phone…" value="' + esc(f.q) + '" aria-label="Search projects">' +
+        '<select id="pown" aria-label="Filter by owner"><option value="">Everyone\'s projects</option><option value="me"' + (f.owner === "me" ? " selected" : "") + '>My projects</option><option value="none"' + (f.owner === "none" ? " selected" : "") + '>No owner</option>' + (S.team || []).map(m => '<option value="' + m.id + '"' + (f.owner === m.id ? " selected" : "") + '>' + esc(m.name) + '</option>').join("") + '</select>' +
+        '<span style="flex:1"></span><button class="btn btn-p btn-sm" data-pnew>+ New project</button></div>' +
+      (!P.length ? '<div class="empty" style="margin-top:14px">No projects yet. When a deal is won, press <b>Start project</b> on the lead or the accepted quote, or add one here. Each project gets ready-made steps for its service, an owner and a due date, and you can send the client a progress update on WhatsApp.</div>' :
+      '<div class="board pboard" style="margin-top:14px">' + P_COLS.map(([k, label]) => {
+        const list = sortP(rows.filter(p => p.status === k && recentDone(p)));
+        return '<section class="bcol pc-' + k + '" data-pdrop="' + k + '" aria-label="' + label + '"><header><span class="bdot"></span><b>' + label + '</b><span class="bcount">' + list.length + '</span></header><p class="bhint">' + P_HINT[k] + '</p>' +
+          '<div class="bbody">' + list.map(pCard).join("") + (list.length ? '' : '<p class="bempty">Drop a project here</p>') + '</div></section>';
+      }).join("") + '</div>' +
+      (hold.length ? '<section class="card p-hold" data-pdrop="hold"><h2>On hold <span class="t-count">' + hold.length + '</span></h2><div class="p-hold-row">' + hold.map(pCard).join("") + '</div></section>' : '<div class="p-hold-drop" data-pdrop="hold">Drop here to put a project on hold</div>'));
+    const fq = document.getElementById("pq"), fo = document.getElementById("pown");
+    fq.oninput = () => { f.q = fq.value; renderProjects(c); const n = document.getElementById("pq"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
+    fo.onchange = () => { f.owner = fo.value; renderProjects(c); };
+    c.onclick = e => { if (e.target.closest("[data-pnew]")) return openProject(null); const card = e.target.closest("[data-proj]"); if (card) openProject(P.find(p => p.id === card.dataset.proj)); };
+    c.onkeydown = e => { if (e.key === "Enter" && e.target.dataset && e.target.dataset.proj) openProject(P.find(p => p.id === e.target.dataset.proj)); };
+    let dragId = null;
+    c.querySelectorAll(".pcard").forEach(el => { el.addEventListener("dragstart", e => { dragId = el.dataset.proj; e.dataTransfer.setData("text/plain", dragId); el.classList.add("dragging"); }); el.addEventListener("dragend", () => el.classList.remove("dragging")); });
+    c.querySelectorAll("[data-pdrop]").forEach(col => {
+      col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("over"); });
+      col.addEventListener("dragleave", () => col.classList.remove("over"));
+      col.addEventListener("drop", e => { e.preventDefault(); col.classList.remove("over"); const id = e.dataTransfer.getData("text/plain") || dragId; if (id) moveProject(id, col.dataset.pdrop); });
+    });
+  }
+  async function moveProject(id, status) {
+    const p = (S.projects || []).find(x => x.id === id); if (!p || p.status === status) return;
+    try {
+      const up = await api("PATCH", "projects/" + id, { status }); syncList("projects", up);
+      if (up.lead_id) api("POST", "lead-activity", { leadId: up.lead_id, kind: "task", detail: "Project " + up.name + ": " + P_LABEL[status] }).catch(() => {});
+      toast("Moved to " + P_LABEL[status] + "." + (status === "done" ? " Add the domain or hosting renewal from the project if there is one." : ""));
+    } catch (er) { toast(needsDb(er) ? DB_MSG : er.message, true); }
+    if (S.view === "projects") renderView();
+  }
+  function projectWa(d) {
+    const brand = (S.content.settings || {}).brand || "us", g = pProg(d), tasks = d.tasks || [];
+    const doneRecent = tasks.filter(x => x.done).slice(-2).map(x => x.title), next = tasks.find(x => !x.done);
+    const text = "Hi " + firstName((d.client || {}).name) + ", a quick update from " + brand + " on " + d.name + ":\n\n" +
+      (g.t ? g.d + " of " + g.t + " steps done (" + g.pct + "%)." : P_LABEL[d.status] + ".") +
+      (doneRecent.length ? "\nDone: " + doneRecent.join(", ") + "." : "") + (next ? "\nNext: " + next.title + (next.due ? " by " + fmtDay(next.due) : "") + "." : "") +
+      (d.status === "review" ? "\n\nWe're waiting for your feedback to move ahead." : "") + (d.due_on && d.status !== "done" ? "\nTarget date: " + fmtDay(d.due_on) + "." : "");
+    return "https://wa.me/" + waNum((d.client || {}).phone) + "?text=" + encodeURIComponent(text);
+  }
+  function projectFrom(src) {
+    // one project per lead or quote: open it if it already exists
+    const P = S.projects || [];
+    const have = src.quote_id ? P.find(p => p.quote_id === src.quote_id) : src.lead_id ? P.find(p => p.lead_id === src.lead_id && p.status !== "done") : null;
+    return openProject(have || null, have ? null : src);
+  }
+  function openProject(p, pre) {
+    pre = pre || {};
+    const d = p ? JSON.parse(JSON.stringify(p)) : { name: pre.name || "", service: pre.service || "", client: Object.assign({ name: "", phone: "", business: "", email: "" }, pre.client || {}), status: "todo", owner_id: pre.owner_id || S.user.id,
+      start_on: todayStr(), due_on: pre.due_on || "", value: pre.value || 0, tasks: pre.tasks || (pre.service || pre.name ? tplFor(pre.service || pre.name) : []), notes: pre.notes || "", lead_id: pre.lead_id || null, quote_id: pre.quote_id || null };
+    d.client = Object.assign({ name: "", phone: "", business: "", email: "" }, d.client); d.tasks = d.tasks || [];
+    const names = [...new Set((S.content.services || []).map(v => v.name).concat((S.content.products || []).map(x => x.name)).filter(Boolean))];
+    const m = document.createElement("div"); m.className = "modal";
+    let confirmDel = false;
+    const draw = () => {
+      const g = pProg(d), saved = !!d.id, t = todayStr();
+      m.innerHTML = '<div class="box q-box p-box" role="dialog" aria-modal="true" aria-labelledby="pTitle"><header><h2 id="pTitle">' + (saved ? esc(d.name) : 'New project') + '</h2>' + (saved ? '<span class="tagp ' + (d.status === "done" ? "live" : pOverdue(d) ? "bad" : d.status === "hold" ? "off" : "warn") + '">' + (pOverdue(d) ? "Past due" : P_LABEL[d.status]) + '</span>' : '') + '<button class="btn btn-g btn-sm" data-x>Close</button></header>' +
+        '<div class="q-grid"><div class="q-main">' +
+          '<section><h3>Project</h3><div class="q-two">' +
+            '<div class="fld" style="grid-column:1/-1"><label for="p_name">Project name</label><input type="text" id="p_name" data-pf="name" maxlength="160" value="' + esc(d.name) + '" placeholder="e.g. Clinic website with booking"></div>' +
+            '<div class="fld"><label for="p_svc">Service</label><input type="text" id="p_svc" data-pf="service" list="pNames" maxlength="160" value="' + esc(d.service) + '" placeholder="Website Design & Development"><datalist id="pNames">' + names.map(n => '<option value="' + esc(n) + '">').join("") + '</datalist></div>' +
+            '<div class="fld"><label for="p_status">Status</label><select id="p_status" data-pf="status">' + Object.entries(P_LABEL).map(([k, v]) => '<option value="' + k + '"' + (k === d.status ? " selected" : "") + '>' + v + '</option>').join("") + '</select></div>' +
+            '<div class="fld"><label for="p_owner">Owner</label><select id="p_owner" data-pf="owner_id"><option value="">No owner</option>' + (S.team || []).map(x => '<option value="' + x.id + '"' + (x.id === d.owner_id ? " selected" : "") + '>' + esc(x.name) + (x.id === S.user.id ? " (me)" : "") + '</option>').join("") + '</select></div>' +
+            '<div class="fld"><label for="p_val">Project value (₹, before GST) <small>optional</small></label><input type="number" id="p_val" data-pf="value" min="0" step="500" value="' + (d.value ? d.value / 100 : "") + '"></div>' +
+            '<div class="fld"><label for="p_start">Start date</label><input type="date" id="p_start" data-pf="start_on" value="' + esc(d.start_on || "") + '"></div>' +
+            '<div class="fld"><label for="p_due">Due date</label><input type="date" id="p_due" data-pf="due_on" value="' + esc(d.due_on || "") + '"></div>' +
+          '</div></section>' +
+          '<section><h3>Client</h3><div class="q-two">' + [["name", "Name"], ["phone", "Mobile"], ["business", "Business"], ["email", "Email"]].map(([k, l]) => '<div class="fld"><label for="pc_' + k + '">' + l + '</label><input type="text" id="pc_' + k + '" data-pc="' + k + '" maxlength="160" value="' + esc(d.client[k] || "") + '"></div>').join("") + '</div></section>' +
+          '<section><div class="p-th"><h3>Steps</h3><span class="help">' + (g.t ? g.d + ' of ' + g.t + ' done' : 'Add the steps for this job') + '</span><span style="flex:1"></span><button type="button" class="btn btn-g btn-sm" data-ptpl>Add steps for this service</button></div>' +
+            '<ol class="p-tasks">' + d.tasks.map((x, i) => '<li class="p-task' + (x.done ? " done" : "") + (!x.done && x.due && x.due < t ? " late" : "") + '"><input type="checkbox" data-pt="' + i + '" data-k="done"' + (x.done ? " checked" : "") + ' aria-label="Done: ' + esc(x.title) + '">' +
+              '<input type="text" class="p-ttl" data-pt="' + i + '" data-k="title" maxlength="160" value="' + esc(x.title) + '" aria-label="Step ' + (i + 1) + '">' +
+              '<input type="date" class="p-tdue" data-pt="' + i + '" data-k="due" value="' + esc(x.due || "") + '" aria-label="Step due date">' +
+              '<button type="button" class="ib" data-pdel="' + i + '" aria-label="Remove step">✕</button></li>').join("") + '</ol>' +
+            '<button type="button" class="btn btn-s btn-sm" data-padd>+ Add step</button></section>' +
+          '<section><h3>Notes</h3><textarea rows="3" data-pf="notes" maxlength="4000" placeholder="Logins, links, client preferences, what was promised">' + esc(d.notes || "") + '</textarea></section>' +
+        '</div><aside class="q-side"><div class="card q-sum">' +
+          '<div class="p-ring" style="--p:' + g.pct + '"><b>' + g.pct + '%</b><span>' + (g.t ? g.d + '/' + g.t + ' steps' : 'No steps') + '</span></div>' +
+          (d.due_on ? '<p class="help" style="text-align:center;margin:0">' + (pOverdue(d) ? '<b style="color:var(--bad)">' + (-daysTo(d.due_on)) + ' days past the due date</b>' : d.status === "done" ? 'Delivered' + (d.done_at ? ' ' + new Date(d.done_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : '') : daysTo(d.due_on) === 0 ? 'Due today' : daysTo(d.due_on) + ' days left') + '</p>' : '') +
+          '<div class="q-err" id="pErr" role="alert"></div>' +
+          '<div class="q-btns"><button class="btn btn-p" data-psave>' + (saved ? 'Save changes' : 'Create project') + '</button></div>' +
+        '</div>' +
+        (saved ? '<div class="card q-share"><h3>Client update</h3><p class="help" style="font-size:13px;margin:0">Sends the progress, the last steps done and what comes next.</p><div class="q-btns">' + (d.client.phone ? '<a class="btn btn-p btn-sm" target="_blank" rel="noopener" href="' + esc(projectWa(d)) + '" data-pshare>' + IC.wa + ' Send update on WhatsApp</a>' : '<span class="help">Add the client\'s mobile to send updates.</span>') + '</div>' +
+          '<h3>More</h3><div class="q-btns">' + (d.lead_id ? '<button class="btn btn-s btn-sm" data-plead>Open lead</button>' : '') + '<button class="btn btn-s btn-sm" data-pren>Add renewal</button>' + (d.client.phone ? '<button class="btn btn-s btn-sm" data-ppay>Payment link</button>' : '') + '</div>' +
+          (isStaff() ? '' : confirmDel ? '<div class="q-btns"><button class="btn btn-d btn-sm" data-pdelyes>Delete project</button><button class="btn btn-g btn-sm" data-pdelno>Keep</button></div>' : '<button class="linkish p-del" data-pdelask>Delete project</button>') + '</div>' : '') +
+        '</aside></div></div>';
+    };
+    draw(); document.body.appendChild(m);
+    const close = () => { m.remove(); document.removeEventListener("keydown", onKey); if (S.view === "projects" || S.view === "today") renderView(); };
+    const onKey = e => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    const redraw = () => { const keep = document.activeElement && document.activeElement.id; draw(); if (keep) { const el = m.querySelector("#" + keep); if (el) el.focus(); } };
+    m.addEventListener("input", e => {
+      const el = e.target;
+      if (el.dataset.pc) d.client[el.dataset.pc] = el.value;
+      if (el.dataset.pf && el.type !== "date" && el.tagName !== "SELECT") d[el.dataset.pf] = el.dataset.pf === "value" ? Math.round((Number(el.value) || 0) * 100) : el.value;
+      if (el.dataset.pt && el.dataset.k === "title") d.tasks[+el.dataset.pt].title = el.value;
+    });
+    m.addEventListener("change", e => {
+      const el = e.target;
+      if (el.dataset.pf && (el.type === "date" || el.tagName === "SELECT")) { d[el.dataset.pf] = el.value || (el.dataset.pf === "owner_id" ? null : ""); redraw(); }
+      if (el.dataset.pt && el.dataset.k === "done") { d.tasks[+el.dataset.pt].done = el.checked; redraw(); }
+      if (el.dataset.pt && el.dataset.k === "due") { d.tasks[+el.dataset.pt].due = el.value; redraw(); }
+    });
+    m.addEventListener("click", async e => {
+      if (e.target === m || e.target.closest("[data-x]")) return close();
+      const b = e.target.closest("button, a"); if (!b) return;
+      if (b.hasAttribute("data-padd")) { d.tasks.push({ id: tid(), title: "", done: false, due: "" }); draw(); const n = m.querySelectorAll(".p-ttl"); if (n.length) n[n.length - 1].focus(); return; }
+      if (b.dataset.pdel) { d.tasks.splice(+b.dataset.pdel, 1); draw(); return; }
+      if (b.hasAttribute("data-ptpl")) { const have = new Set(d.tasks.map(x => x.title.toLowerCase())); const add = tplFor(d.service || d.name).filter(x => !have.has(x.title.toLowerCase())); d.tasks = d.tasks.concat(add); draw(); toast(add.length ? add.length + " steps added." : "These steps are already in the list."); return; }
+      if (b.hasAttribute("data-pshare")) { if (d.lead_id) api("POST", "lead-activity", { leadId: d.lead_id, kind: "whatsapp", detail: "Sent a project update: " + pProg(d).pct + "% done" }).catch(() => {}); return; }
+      if (b.hasAttribute("data-plead")) { close(); if (S.view !== "leads") await navigate("leads"); return openLead(d.lead_id); }
+      if (b.hasAttribute("data-pren")) { close(); return openRenewal(null, { client: d.client, lead_id: d.lead_id, project_id: d.id, kind: /web|site|landing/i.test(d.service + " " + d.name) ? "domain" : /software|crm|app/i.test(d.service + " " + d.name) ? "software" : "amc" }); }
+      if (b.hasAttribute("data-ppay")) { close(); return openPayLink({ name: d.client.name, phone: d.client.phone, email: d.client.email, business: d.client.business, description: d.name + " – ", amount: "", leadId: d.lead_id || "" }); }
+      if (b.hasAttribute("data-pdelask")) { confirmDel = true; draw(); return; }
+      if (b.hasAttribute("data-pdelno")) { confirmDel = false; draw(); return; }
+      if (b.hasAttribute("data-pdelyes")) {
+        try { await api("DELETE", "projects/" + d.id); S.projects = (S.projects || []).filter(x => x.id !== d.id); toast("Project deleted."); close(); } catch (er) { toast(er.message, true); }
+        return;
+      }
+      if (b.hasAttribute("data-psave")) {
+        const err = m.querySelector("#pErr"); err.textContent = "";
+        if (!String(d.name).trim()) { err.textContent = "Give the project a name."; return m.querySelector("#p_name").focus(); }
+        if (d.start_on && d.due_on && d.due_on < d.start_on) { err.textContent = "The due date is before the start date."; return; }
+        const body = { name: String(d.name).trim().slice(0, 160), service: String(d.service || "").trim().slice(0, 160), status: d.status, owner_id: d.owner_id || null, start_on: d.start_on || null, due_on: d.due_on || null, value: Math.max(0, Math.round(d.value || 0)),
+          client: Object.fromEntries(Object.entries(d.client).map(([k, v]) => [k, String(v || "").trim().slice(0, 160)])), tasks: d.tasks.filter(x => String(x.title).trim()).map(x => ({ id: x.id || tid(), title: String(x.title).trim().slice(0, 160), done: !!x.done, due: x.due || "" })).slice(0, 60),
+          notes: String(d.notes || "").slice(0, 4000), lead_id: d.lead_id || null, quote_id: d.quote_id || null };
+        b.disabled = true;
+        try {
+          const before = p ? p.status : null, fresh = !d.id;
+          const out = d.id ? await api("PATCH", "projects/" + d.id, body) : await api("POST", "projects", body);
+          Object.assign(d, out); syncList("projects", out); p = out;
+          if (out.lead_id && (fresh || before !== out.status)) api("POST", "lead-activity", { leadId: out.lead_id, kind: "task", detail: fresh ? "Project started: " + out.name : "Project " + out.name + ": " + P_LABEL[out.status] }).catch(() => {});
+          toast(fresh ? "Project created." : "Saved.");
+          draw();
+        } catch (er) { err.textContent = needsDb(er) ? DB_MSG : er.message; b.disabled = false; }
+      }
+    });
+  }
+
+  /* ---------- renewals: domain, hosting, AMC and plans that come round again ---------- */
+  const R_KIND = { domain: "Domain", hosting: "Hosting", amc: "AMC / maintenance", software: "Software plan", ssl: "SSL certificate", ads: "Ads management", other: "Other" };
+  const R_CYCLE = { monthly: "Monthly", quarterly: "Every 3 months", yearly: "Yearly" };
+  const R_YEAR = { monthly: 12, quarterly: 4, yearly: 1, once: 0 };
+  const nextDate = (k, cycle) => { const d = new Date(k + "T00:00:00"); const day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + ({ monthly: 1, quarterly: 3, yearly: 12 })[cycle || "yearly"]); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); d.setDate(Math.min(day, last)); return dayKey(d); };
+  const rName = r => { const c = r.client || {}; return c.business || c.name || "–"; };
+  function renewalWa(r) {
+    const brand = (S.content.settings || {}).brand || "us", gst = S.storeStatus && S.storeStatus.gst, d = daysTo(r.renew_on);
+    const text = "Hi " + firstName((r.client || {}).name) + ", a reminder from " + brand + ": your " + R_KIND[r.kind].toLowerCase() + (r.label ? " (" + r.label + ")" : "") + (d < 0 ? " was due for renewal on " : " renews on ") + new Date(r.renew_on + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "long" }) + "." +
+      (r.amount ? "\nRenewal: " + inr(r.amount) + (gst ? " + GST" : "") + " (" + R_CYCLE[r.cycle].toLowerCase() + ")." : "") + "\n\nReply here and we'll send you the payment link, so there's no break in service.";
+    return "https://wa.me/" + waNum((r.client || {}).phone) + "?text=" + encodeURIComponent(text);
+  }
+  function rRow(r) {
+    const d = daysTo(r.renew_on), late = d < 0;
+    return '<tr data-ren="' + r.id + '"' + (r.status !== "active" ? ' class="r-off"' : '') + '><td><b class="r-date' + (late ? " late" : d <= 15 ? " soon" : "") + '">' + fmtDay(r.renew_on) + '</b><div class="sub">' + (r.status !== "active" ? "Stopped" : late ? (-d === 1 ? "1 day overdue" : -d + " days overdue") : d === 0 ? "Today" : "in " + d + " day" + (d === 1 ? "" : "s")) + '</div></td>' +
+      '<td><button class="linkish" data-renopen="' + r.id + '">' + esc(rName(r)) + '</button>' + ((r.client || {}).business && (r.client || {}).name ? '<div class="sub">' + esc(r.client.name) + '</div>' : '') + '</td>' +
+      '<td>' + esc(R_KIND[r.kind] || r.kind) + (r.label ? '<div class="sub">' + esc(r.label) + '</div>' : '') + '</td>' +
+      '<td><b>' + (r.amount ? inr(r.amount) : '–') + '</b><div class="sub">' + esc(R_CYCLE[r.cycle] || r.cycle) + '</div></td>' +
+      '<td class="r-acts">' + (r.status === "active" ? ((r.client || {}).phone ? '<a class="btn btn-s btn-sm" target="_blank" rel="noopener" href="' + esc(renewalWa(r)) + '" data-renwa="' + r.id + '">Remind</a>' : '') + ((r.client || {}).phone && r.amount ? '<button class="btn btn-g btn-sm" data-renpay="' + r.id + '">Payment link</button>' : '') + '<button class="btn btn-p btn-sm" data-rendone="' + r.id + '">Renewed</button>' : '<button class="btn btn-g btn-sm" data-renopen="' + r.id + '">Open</button>') + '</td></tr>';
+  }
+  function renderRenewals(c) {
+    const f = S.renFilter || (S.renFilter = { q: "", kind: "", show: "active" }), R = S.renewals || [], q = f.q.toLowerCase(), t = todayStr(), m30 = addDays(30);
+    const act = R.filter(r => r.status === "active");
+    const rows = R.filter(r => (f.show === "all" || r.status === f.show) && (!f.kind || r.kind === f.kind) && (!q || [rName(r), (r.client || {}).name, (r.client || {}).phone, r.label].join(" ").toLowerCase().includes(q))).sort((a, b) => a.renew_on.localeCompare(b.renew_on));
+    const due30 = act.filter(r => r.renew_on >= t && r.renew_on <= m30), over = act.filter(r => r.renew_on < t);
+    const yearly = act.reduce((a, r) => a + Number(r.amount || 0) * (R_YEAR[r.cycle] || 0), 0), margin = act.filter(r => r.cost).reduce((a, r) => a + (Number(r.amount || 0) - Number(r.cost || 0)) * (R_YEAR[r.cycle] || 0), 0);
+    const grp = (title, list) => list.length ? '<tr class="r-grp"><th colspan="5">' + title + ' <span class="t-count">' + list.length + '</span></th></tr>' + list.map(rRow).join("") : '';
+    c.innerHTML = '<div class="d-kpis">' +
+      '<div class="card d-kpi tone-a">' + ico("bell") + '<span class="d-kl">Due in 30 days</span><b>' + inr(due30.reduce((a, r) => a + Number(r.amount || 0), 0)) + '</b><span class="d-delta flat">' + due30.length + ' renewal' + (due30.length === 1 ? '' : 's') + '</span></div>' +
+      '<div class="card d-kpi tone-d">' + ico("send") + '<span class="d-kl">Overdue</span><b>' + over.length + '</b><span class="d-delta ' + (over.length ? "down" : "flat") + '">' + (over.length ? inr(over.reduce((a, r) => a + Number(r.amount || 0), 0)) + ' to collect' : 'Nothing overdue') + '</span></div>' +
+      '<div class="card d-kpi tone-c">' + ico("trophy") + '<span class="d-kl">Repeat income a year</span><b>' + inr(yearly) + '</b><span class="d-delta flat">From ' + act.length + ' active</span></div>' +
+      '<div class="card d-kpi tone-b">' + ico("chart") + '<span class="d-kl">Your margin a year</span><b>' + (margin ? inr(margin) : '–') + '</b><span class="d-delta flat">' + (margin ? 'Where you added your cost' : 'Add your cost to see it') + '</span></div></div>' +
+      '<div class="filters" style="margin-top:16px"><input type="search" id="rq" placeholder="Search client, domain, phone…" value="' + esc(f.q) + '" aria-label="Search renewals">' +
+        '<select id="rk" aria-label="Filter by type"><option value="">All types</option>' + Object.entries(R_KIND).map(([k, v]) => '<option value="' + k + '"' + (f.kind === k ? " selected" : "") + '>' + v + '</option>').join("") + '</select>' +
+        '<select id="rs" aria-label="Show"><option value="active"' + (f.show === "active" ? " selected" : "") + '>Active</option><option value="cancelled"' + (f.show === "cancelled" ? " selected" : "") + '>Stopped</option><option value="all"' + (f.show === "all" ? " selected" : "") + '>All</option></select>' +
+        '<span style="flex:1"></span><button class="btn btn-p btn-sm" data-rennew>+ Add renewal</button></div>' +
+      (!R.length ? '<div class="empty" style="margin-top:14px">No renewals yet. Add each client\'s domain, hosting, AMC or software plan with its renewal date. They show on Today 15 days ahead, with a ready WhatsApp reminder and a payment link, so no renewal is missed.</div>' :
+       rows.length ? '<div class="tbl-wrap" style="margin-top:14px"><table class="r-tbl"><thead><tr><th>Renews on</th><th>Client</th><th>What</th><th>Amount</th><th></th></tr></thead><tbody>' +
+         (f.show === "active" ? grp("Overdue", rows.filter(r => r.renew_on < t)) + grp("Next 30 days", rows.filter(r => r.renew_on >= t && r.renew_on <= m30)) + grp("Later", rows.filter(r => r.renew_on > m30)) : rows.map(rRow).join("")) +
+         '</tbody></table></div>' : '<div class="empty" style="margin-top:14px">No renewals match this filter.</div>');
+    const fq = document.getElementById("rq");
+    fq.oninput = () => { f.q = fq.value; renderRenewals(c); const n = document.getElementById("rq"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); };
+    document.getElementById("rk").onchange = e => { f.kind = e.target.value; renderRenewals(c); };
+    document.getElementById("rs").onchange = e => { f.show = e.target.value; renderRenewals(c); };
+    c.onclick = renewalClick;
+  }
+  async function renewalClick(e) {
+    const a = e.target.closest("[data-renwa]");
+    if (a) { const r = (S.renewals || []).find(x => x.id === a.dataset.renwa); if (r && r.lead_id) api("POST", "lead-activity", { leadId: r.lead_id, kind: "whatsapp", detail: "Renewal reminder: " + R_KIND[r.kind] + (r.label ? " " + r.label : "") }).catch(() => {}); return; }
+    const b = e.target.closest("button"); if (!b) return;
+    const d = b.dataset, find = id => (S.renewals || []).find(x => x.id === id);
+    if (d.rennew !== undefined) return openRenewal(null);
+    if (d.renopen) return openRenewal(find(d.renopen));
+    if (d.renpay) { const r = find(d.renpay); return openPayLink({ name: r.client.name, phone: r.client.phone, email: r.client.email, business: r.client.business, description: R_KIND[r.kind] + " renewal" + (r.label ? " – " + r.label : "") + " (" + R_CYCLE[r.cycle].toLowerCase() + ")", amount: Number(r.amount) / 100, leadId: r.lead_id || "" }); }
+    if (d.rendone) return markRenewed(find(d.rendone), b);
+  }
+  async function markRenewed(r, b) {
+    if (!r) return;
+    if (b) b.disabled = true;
+    const next = nextDate(r.renew_on, r.cycle);
+    try {
+      const up = await api("PATCH", "renewals/" + r.id, { renew_on: next, last_renewed_on: todayStr() }); syncList("renewals", up);
+      if (r.lead_id) api("POST", "lead-activity", { leadId: r.lead_id, kind: "note", detail: "Renewed " + R_KIND[r.kind] + (r.label ? " " + r.label : "") + ". Next renewal " + fmtDay(next) }).catch(() => {});
+      toast("Renewed. Next renewal on " + new Date(next + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) + ".");
+    } catch (er) { toast(needsDb(er) ? DB_MSG : er.message, true); if (b) b.disabled = false; return; }
+    if (S.view === "renewals" || S.view === "today") renderView();
+    if (S.view === "today") refreshNavCount();
+  }
+  function openRenewal(r, pre) {
+    pre = pre || {};
+    const d = r ? JSON.parse(JSON.stringify(r)) : { client: Object.assign({ name: "", phone: "", business: "", email: "" }, pre.client || {}), kind: pre.kind || "domain", label: pre.label || "", renew_on: pre.renew_on || addDays(365), cycle: "yearly", amount: pre.amount || 0, cost: 0, status: "active", notes: "", lead_id: pre.lead_id || null, project_id: pre.project_id || null };
+    d.client = Object.assign({ name: "", phone: "", business: "", email: "" }, d.client);
+    const m = document.createElement("div"); m.className = "modal";
+    let confirmDel = false;
+    const draw = () => {
+      m.innerHTML = '<div class="box q-box r-box" role="dialog" aria-modal="true" aria-labelledby="rTitle"><header><h2 id="rTitle">' + (d.id ? esc(R_KIND[d.kind]) + (d.label ? ': ' + esc(d.label) : '') : 'Add renewal') + '</h2><button class="btn btn-g btn-sm" data-x>Close</button></header>' +
+        '<section><h3>Client</h3><div class="q-two">' + [["name", "Name"], ["phone", "Mobile"], ["business", "Business"], ["email", "Email"]].map(([k, l]) => '<div class="fld"><label for="rc_' + k + '">' + l + '</label><input type="text" id="rc_' + k + '" data-rc="' + k + '" maxlength="160" value="' + esc(d.client[k] || "") + '"></div>').join("") + '</div></section>' +
+        '<section><h3>Renewal</h3><div class="q-two">' +
+          '<div class="fld"><label for="r_kind">Type</label><select id="r_kind" data-rf="kind">' + Object.entries(R_KIND).map(([k, v]) => '<option value="' + k + '"' + (k === d.kind ? " selected" : "") + '>' + v + '</option>').join("") + '</select></div>' +
+          '<div class="fld"><label for="r_label">Name <small>optional</small></label><input type="text" id="r_label" data-rf="label" maxlength="160" value="' + esc(d.label) + '" placeholder="e.g. sharmadental.in or Hostinger Business"></div>' +
+          '<div class="fld"><label for="r_on">Next renewal date</label><input type="date" id="r_on" data-rf="renew_on" value="' + esc(d.renew_on) + '"></div>' +
+          '<div class="fld"><label for="r_cycle">Renews</label><select id="r_cycle" data-rf="cycle">' + Object.entries(R_CYCLE).map(([k, v]) => '<option value="' + k + '"' + (k === d.cycle ? " selected" : "") + '>' + v + '</option>').join("") + '</select></div>' +
+          '<div class="fld"><label for="r_amt">Client pays (₹, before GST)</label><input type="number" id="r_amt" data-rf="amount" min="0" step="1" value="' + (d.amount ? d.amount / 100 : "") + '"></div>' +
+          '<div class="fld"><label for="r_cost">Your cost (₹) <small>optional, for margin</small></label><input type="number" id="r_cost" data-rf="cost" min="0" step="1" value="' + (d.cost ? d.cost / 100 : "") + '"></div>' +
+          (d.id ? '<div class="fld"><label for="r_st">Status</label><select id="r_st" data-rf="status"><option value="active"' + (d.status === "active" ? " selected" : "") + '>Active</option><option value="cancelled"' + (d.status === "cancelled" ? " selected" : "") + '>Stopped (client left or moved)</option></select></div>' : '') +
+          '<div class="fld" style="grid-column:1/-1"><label for="r_notes">Notes <small>optional</small></label><textarea id="r_notes" rows="2" data-rf="notes" maxlength="1000" placeholder="Registrar, login hint, what is included">' + esc(d.notes || "") + '</textarea></div>' +
+        '</div></section>' +
+        (d.last_renewed_on ? '<p class="help" style="margin:0">Last renewed ' + fmtDay(d.last_renewed_on) + '.</p>' : '') +
+        '<div class="q-err" id="rErr" role="alert"></div>' +
+        '<div class="q-btns"><button class="btn btn-p" data-rsave>' + (d.id ? 'Save changes' : 'Add renewal') + '</button>' + (d.id && !isStaff() ? (confirmDel ? '<button class="btn btn-d" data-rdelyes>Delete renewal</button><button class="btn btn-g" data-rdelno>Keep</button>' : '<button class="btn btn-g" data-rdelask>Delete</button>') : '') + '</div></div>';
+    };
+    draw(); document.body.appendChild(m);
+    if (!S.storeStatus) api("GET", "store-status").then(s => { S.storeStatus = s || {}; }).catch(() => {});
+    const close = () => { m.remove(); document.removeEventListener("keydown", onKey); if (S.view === "renewals" || S.view === "today") renderView(); };
+    const onKey = e => { if (e.key === "Escape") close(); };
+    document.addEventListener("keydown", onKey);
+    m.addEventListener("input", e => { const el = e.target; if (el.dataset.rc) d.client[el.dataset.rc] = el.value; if (el.dataset.rf) d[el.dataset.rf] = ["amount", "cost"].includes(el.dataset.rf) ? Math.round((Number(el.value) || 0) * 100) : el.value; });
+    m.addEventListener("change", e => { const el = e.target; if (el.dataset.rf === "kind") { d.kind = el.value; draw(); } });
+    m.addEventListener("click", async e => {
+      if (e.target === m || e.target.closest("[data-x]")) return close();
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.hasAttribute("data-rdelask")) { confirmDel = true; return draw(); }
+      if (b.hasAttribute("data-rdelno")) { confirmDel = false; return draw(); }
+      if (b.hasAttribute("data-rdelyes")) { try { await api("DELETE", "renewals/" + d.id); S.renewals = (S.renewals || []).filter(x => x.id !== d.id); toast("Renewal deleted."); close(); } catch (er) { toast(er.message, true); } return; }
+      if (b.hasAttribute("data-rsave")) {
+        const err = m.querySelector("#rErr"); err.textContent = "";
+        if (!String(d.client.name || d.client.business).trim()) { err.textContent = "Add the client's name or business."; return m.querySelector("#rc_name").focus(); }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d.renew_on || "")) { err.textContent = "Choose the next renewal date."; return m.querySelector("#r_on").focus(); }
+        const body = { client: Object.fromEntries(Object.entries(d.client).map(([k, v]) => [k, String(v || "").trim().slice(0, 160)])), kind: d.kind, label: String(d.label || "").trim().slice(0, 160), renew_on: d.renew_on, cycle: d.cycle,
+          amount: Math.max(0, d.amount || 0), cost: Math.max(0, d.cost || 0), status: d.status || "active", notes: String(d.notes || "").slice(0, 1000), lead_id: d.lead_id || null, project_id: d.project_id || null };
+        b.disabled = true;
+        try {
+          const out = d.id ? await api("PATCH", "renewals/" + d.id, body) : await api("POST", "renewals", body);
+          syncList("renewals", out); toast(d.id ? "Saved." : "Renewal added. It will show on Today 15 days before " + fmtDay(out.renew_on) + "."); close();
+        } catch (er) { err.textContent = needsDb(er) ? DB_MSG : er.message; b.disabled = false; }
+      }
+    });
+  }
 
   /* ---------- store: orders ---------- */
   const inr = p => "₹" + (Number(p || 0) / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -1062,7 +1404,7 @@
     d.innerHTML = '<header class="dr-head"><div><span class="prio p-' + l.priority + '">' + PRIO[l.priority] + ' · ' + l.score + '</span><h2>' + esc(l.name) + '</h2><p>' + esc([l.business, l.businessType, l.city].filter(Boolean).join(" · ") || leadSource(l)) + '</p></div><button class="ib" data-dr="close" aria-label="Close">✕</button></header>' +
       '<div class="dr-body">' +
         (w ? '<div class="dr-alert' + (w.late ? " late" : "") + '">⏱ Waiting ' + w.txt + ' for a first reply' + (w.late ? ' · past your ' + slaMin() + '-minute target' : '') + '</div>' : l.firstResponseAt ? '<div class="dr-ok">✓ First reply in ' + replyTime(l) + '</div>' : '') +
-        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + '<button class="btn btn-s btn-sm" data-dr="quote">Quote</button>' + (l.phone ? '<button class="btn btn-s btn-sm" data-dr="pay">₹ Request payment</button>' : '') + '</div>' +
+        '<div class="dr-actions">' + (l.phone ? '<a class="btn btn-s btn-sm" href="tel:' + esc(l.phone) + '" data-log="call">📞 Call</a><a class="btn btn-p btn-sm" href="' + esc(wa) + '?text=' + encodeURIComponent("Hi " + (l.name || "").split(" ")[0] + ", this is " + ((S.content.settings || {}).brand || "us") + ". Thanks for your enquiry about " + (l.service || "our services") + ".") + '" target="_blank" rel="noopener" data-log="whatsapp">WhatsApp</a>' : '') + (l.email ? '<a class="btn btn-s btn-sm" href="mailto:' + esc(l.email) + '" data-log="email">✉ Email</a>' : '') + '<button class="btn btn-s btn-sm" data-dr="quote">Quote</button><button class="btn btn-s btn-sm" data-dr="project">' + ((S.projects || []).some(p => p.lead_id === l.id && p.status !== "done") ? "Open project" : "Start project") + '</button>' + (l.phone ? '<button class="btn btn-s btn-sm" data-dr="pay">₹ Request payment</button>' : '') + '</div>' +
         '<div class="dr-grid">' +
           field("Stage", '<select data-df="stage">' + STAGES.map(([k, v]) => '<option value="' + k + '"' + (k === l.stage ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
           field("Priority", '<select data-df="priority">' + Object.entries(PRIO).map(([k, v]) => '<option value="' + k + '"' + (k === l.priority ? " selected" : "") + '>' + v + '</option>').join("") + '</select>') +
@@ -1082,6 +1424,7 @@
       const b = e.target.closest("[data-dr],[data-log]"); if (!b) return;
       if (b.dataset.dr === "close") return closeLead();
       if (b.dataset.dr === "quote") { if (!S.quotes) S.quotes = await api("GET", "quotes").catch(() => []); return openQuote(null, { name: l.name, phone: l.phone, email: l.email, business: l.business, city: l.city, service: l.service, leadId: l.id }); }
+      if (b.dataset.dr === "project") return projectFrom({ lead_id: l.id, name: (l.service || "New project") + (l.business ? " – " + l.business : ""), service: l.service || "", client: { name: l.name, phone: l.phone, business: l.business, email: l.email }, value: Math.round((Number(l.dealValue) || 0) * 100) });
       if (b.dataset.dr === "pay") return openPayLink({ name: l.name, phone: l.phone, email: l.email, business: l.business, description: l.service ? l.service + " – " : "", amount: l.dealValue || "", leadId: l.id });
       if (b.dataset.log) { logActivity(l.id, b.dataset.log, b.dataset.log === "whatsapp" ? "Opened WhatsApp chat" : b.dataset.log === "call" ? "Called" : "Emailed", true); return; }
       if (b.dataset.dr === "log") { const t = document.getElementById("actText"); await logActivity(l.id, document.getElementById("actKind").value, t.value.trim() || "", false); t.value = ""; }

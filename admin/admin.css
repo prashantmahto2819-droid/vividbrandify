@@ -500,3 +500,45 @@ button.t-name:hover{text-decoration:underline;text-decoration-color:var(--accent
 .q-acts{white-space:nowrap;text-align:right}.q-acts .btn+.btn{margin-left:6px}
 @media (max-width:900px){.q-grid{grid-template-columns:1fr}.q-side{position:static}}
 @media (max-width:620px){.q-two{grid-template-columns:1fr}.q-item{grid-template-columns:1fr 1fr}.q-name,.q-desc{grid-column:1/-1}.q-amt{text-align:left;padding:0}}
+
+/* ---------- projects board ---------- */
+.pboard .bcol{min-height:160px}
+.pc-todo .bdot{background:var(--muted)}.pc-doing .bdot{background:#F7941D}.pc-review .bdot{background:#7C5CD6}.pc-done .bdot{background:var(--ok)}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 11px;display:grid;gap:5px;cursor:grab;transition:box-shadow .15s,transform .15s}
+.pcard:hover{box-shadow:0 8px 18px -12px rgba(36,16,15,.5);transform:translateY(-1px)}
+.pcard:focus-visible{outline:3px solid var(--accent)}
+.pcard.dragging{opacity:.5}
+.pcard.late{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+.pc-client{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-name{font-size:14px;line-height:1.3}
+.pc-bar{height:6px;border-radius:6px;background:var(--soft);overflow:hidden;margin-top:2px}
+.pc-bar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,#E2352B,#F7941D)}
+.pc-done .pc-bar i{background:var(--ok)}
+.pc-steps{font:600 11.5px var(--body);color:var(--muted);font-variant-numeric:tabular-nums}
+.pc-due{font:600 11.5px var(--body);padding:2px 7px;border-radius:999px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.pc-due.soon{background:var(--warn-bg);color:var(--warn)}.pc-due.late{background:var(--bad-bg);color:var(--bad)}
+.p-hold{margin-top:14px;display:grid;gap:10px}.p-hold h2{font-size:16px;display:flex;align-items:center;gap:8px}
+.p-hold.over,.p-hold-drop.over{border-color:var(--accent)}
+.p-hold-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.p-hold-drop{margin-top:14px;border:2px dashed var(--line);border-radius:12px;padding:12px;text-align:center;color:var(--muted);font-size:13px}
+/* project editor */
+.p-th{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.p-tasks{list-style:none;margin:10px 0;padding:0;display:grid;gap:6px;counter-reset:pt}
+.p-task{display:grid;grid-template-columns:22px minmax(0,1fr) 150px 32px;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.p-task input[type=checkbox]{width:18px;height:18px;accent-color:#15803D;margin:0}
+.q-box .p-task input[type=text],.q-box .p-task input[type=date]{border-color:transparent;background:transparent;padding:6px 8px}
+.q-box .p-task input[type=text]:hover,.q-box .p-task input[type=date]:hover{border-color:var(--line)}
+.p-task.done .p-ttl{text-decoration:line-through;color:var(--muted)}
+.p-task.late{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}.p-task.late .p-tdue{color:var(--bad);font-weight:600}
+.p-ring{--p:0;width:132px;height:132px;margin:0 auto;border-radius:50%;display:grid;place-items:center;align-content:center;background:radial-gradient(closest-side,var(--surface) 78%,transparent 79% 100%),conic-gradient(#F7941D calc(var(--p) * 1%),var(--soft) 0)}
+.p-ring b{font:800 28px/1 var(--display)}.p-ring span{font-size:12.5px;color:var(--muted)}
+.p-del{font-size:13px;color:var(--bad);justify-self:start}
+@media (max-width:620px){.p-task{grid-template-columns:22px minmax(0,1fr) 32px}.p-tdue{grid-column:2/3}}
+
+/* ---------- renewals ---------- */
+.modal .box.r-box{width:min(720px,100%)}
+.r-tbl .r-grp th{background:var(--soft);font:700 13px var(--body);color:var(--ink);text-transform:none;letter-spacing:0;padding:8px 12px}
+.r-date{font-variant-numeric:tabular-nums}.r-date.soon{color:var(--warn)}.r-date.late{color:var(--bad)}
+.r-acts{text-align:right;white-space:nowrap}.r-acts .btn{margin-left:6px}
+.r-off td{opacity:.6}
+@media (max-width:760px){.r-acts{white-space:normal}.r-acts .btn{margin:4px 0 0 4px}}
