@@ -136,3 +136,12 @@ Admin → Work → **Projects**: once a deal is won, press **Start project** on 
 Admin → Work → **Renewals**: add each client's domain, hosting, AMC, SSL or software plan with its renewal date and price (and your cost, to see your margin). Renewals show on Today 15 days ahead with a ready WhatsApp reminder and a payment link; **Renewed** moves the date on by a month, a quarter or a year.
 
 Database: `supabase/migrations/20261018_projects_renewals.sql` (applied on 18 Oct 2026, along with the payment link and quote migrations).
+
+## 13. Our apps (Vividora, BizCRT, Vivid Relay, Drishti)
+
+Admin → Store → **Our apps**. Each app shows in the "Our apps" tabs on the home page, gets its own page at `/apps/<slug>` (BizCRT uses `/bizcrt`), a footer link, and its own section on the Terms, Privacy, Refund and Delivery pages, which Razorpay checks during website review.
+
+- Until you save this list once, the site uses the starting text that ships with the website. Read each app's terms, privacy, refund and delivery text and change anything that doesn't match how you sell it.
+- **To take payment online for an app:** create a product under Store → Products & plans with the same plans and prices, then put that product's slug in the app's **Store product** field. Its plan buttons then open Razorpay checkout. Without it, the buttons open an enquiry form and you can send a payment link from Sales.
+- Tick **Add its own slide** to give an app a slide in the hero slider. The site always adds one "Our apps" slide as the second slide, unless you make a slide with the visual set to "apps" yourself.
+

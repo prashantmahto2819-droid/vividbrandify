@@ -69,7 +69,7 @@
     ["Content", [["slides"], ["offers"], ["services"], ["steps"], ["testimonials"], ["posts"], ["faqs"]]],
     ["Sales", [["quotes", "Quotes"], ["orders", "Orders"], ["payments", "Payments & email"]]],
     ["Work", [["projects", "Projects"], ["renewals", "Renewals"]]],
-    ["Store", [["bizcrt"], ["products"]]],
+    ["Store", [["apps"], ["bizcrt"], ["products"]]],
     ["Layout", [["sections"]]],
     ["WhatsApp", [["widget", "Chat widget"], ["leads", "Leads"], ["automation", "Automation"]]],
     ["Site", [["settings"], ["legal"], ["theme"], ["seo"]]],
@@ -92,6 +92,7 @@
   }
   function previewHref() {
     if (S.view === "posts" && S.sel && S.draft) { const p = S.draft.find(x => x.id === S.sel); if (p && p.slug && p.published) return "/blog/" + encodeURIComponent(p.slug); }
+    if (S.view === "apps" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return o.page === "/bizcrt" || o.slug === "bizcrt" ? "/bizcrt" : "/apps/" + encodeURIComponent(o.slug); }
     if (S.view === "products" && S.sel && S.draft) { const o = S.draft.find(x => x.id === S.sel); if (o && o.slug && o.published) return "/product/" + encodeURIComponent(o.slug); }
     if (S.view === "orders" || S.view === "payments") return "/#store";
     if (S.view === "bizcrt") return "/bizcrt";
@@ -216,12 +217,12 @@
     const t = it[sc.titleField] || "(untitled)";
     let tags = "";
     if (S.view === "slides" && !it.active) tags += '<span class="tagp off">hidden</span>';
-    if ((S.view === "posts" || S.view === "products") && !it.published) tags += '<span class="tagp off">draft</span>';
+    if ((S.view === "posts" || S.view === "products" || S.view === "apps") && !it.published) tags += '<span class="tagp off">draft</span>';
     if (S.view === "testimonials" && it.sample) tags += '<span class="tagp warn">sample</span>';
     if (S.view === "sections" && !it.visible) tags += '<span class="tagp off">hidden</span>';
     if (S.view === "services" && it.featured) tags += '<span class="tagp warn">featured</span>';
     if (S.view === "offers") { const os = offerStatus(it); tags += '<span class="tagp ' + (os === "live" ? "live" : os === "draft" || os === "ended" ? "off" : "warn") + '">' + os + '</span>'; }
-    return esc(t) + tags + (S.view === "posts" ? '<small>' + esc(it.date) + ' · /blog/' + esc(it.slug || "…") + '</small>' : S.view === "offers" ? '<small>' + esc(it.startDate || "now") + ' → ' + esc(it.endDate || "no end date") + ' · /offer/' + esc(it.slug || "…") + '</small>' : S.view === "products" ? '<small>' + String(it.plans || "").split("\n").filter(l => l.trim()).length + ' plan(s) · /product/' + esc(it.slug || "…") + '</small>' : '');
+    return esc(t) + tags + (S.view === "posts" ? '<small>' + esc(it.date) + ' · /blog/' + esc(it.slug || "…") + '</small>' : S.view === "offers" ? '<small>' + esc(it.startDate || "now") + ' → ' + esc(it.endDate || "no end date") + ' · /offer/' + esc(it.slug || "…") + '</small>' : S.view === "products" ? '<small>' + String(it.plans || "").split("\n").filter(l => l.trim()).length + ' plan(s) · /product/' + esc(it.slug || "…") + '</small>' : S.view === "apps" ? '<small>' + esc(it.status || "") + ' · /apps/' + esc(it.slug || "…") + '</small>' : '');
   }
   const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
   function offerStatus(o) {

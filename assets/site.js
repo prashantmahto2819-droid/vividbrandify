@@ -34,6 +34,7 @@ function vbStart() {
   const visKind = icon => ({ web: "website", crm: "crm", app: "growth", bot: "chat", star: "software", chat: "chat", voice: "voice", software: "software", video: "video", growth: "growth" })[icon] || "software";
   function visual(kind, item) {
     const brand = esc(st.brand || "Brand");
+    if (kind === "apps" || /^app:/.test(kind || "")) return appVisual(kind, item);
     if (kind === "image" && item.image) return '<img class="img-visual" src="' + esc(item.image) + '" alt="" loading="lazy">';
     if (kind === "voice") return '<div class="panel"><div class="panel-h"><span>Diwali offer call <small>0:32</small></span><span class="pill live">Live</span></div><div class="wave">' + Array.from({ length: 32 }, (_, i) => '<i style="height:' + (20 + Math.round(Math.abs(Math.sin(i * 1.7)) * 80)) + '%;animation-delay:-' + (i % 7) * .17 + 's"></i>').join("") + '</div><div class="ivr"><div class="hit"><kbd>1</kbd>Talk to sales now</div><div><kbd>2</kbd>Request a callback</div><div><kbd>3</kbd>Stop these calls</div></div></div>';
     if (kind === "software") return '<div class="panel"><div class="panel-h"><span>Festive offer campaign</span><span class="pill">2,400 contacts</span></div><div class="funnel"><div class="frow"><span>Sent</span><span class="bar"><b style="width:100%"></b></span><span>2,400</span></div><div class="frow"><span>Delivered</span><span class="bar"><b style="width:94%"></b></span><span>2,256</span></div><div class="frow"><span>Read</span><span class="bar"><b style="width:71%"></b></span><span>1,704</span></div><div class="frow"><span>Replied</span><span class="bar"><b style="width:18%"></b></span><span>432</span></div></div><div class="small-note">Sample dashboard view. Figures are illustrative.</div></div>';
@@ -119,6 +120,11 @@ function vbStart() {
     const at = S.sections.findIndex(x => x.id === "services");
     S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "bizcrt", visible: true, inNav: true, label: (S.bizcrt && S.bizcrt.name) || "BizCRT", eyebrow: "", heading: "", intro: "" });
   }
+  const APPS = (S.apps || []).filter(a => a && a.published !== false && a.name && a.slug);
+  if (!S.sections.some(x => x.id === "apps")) {
+    const at = S.sections.findIndex(x => x.id === "services");
+    S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "apps", visible: true, inNav: true, label: "Our apps", eyebrow: "Our apps", heading: "Software we build and run ourselves", intro: "Four products made by our team for Indian businesses. Pick one to see what it does and what it costs." });
+  }
   if (!S.sections.some(x => x.id === "store")) {
     const at = S.sections.findIndex(x => x.id === "bizcrt");
     S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "store", visible: true, inNav: true, label: "Software", eyebrow: "Apps & software", heading: "Ready-to-use software for your business", intro: "Pick a plan and start today. Pay securely with UPI, cards or netbanking; we set it up for you." });
@@ -128,7 +134,7 @@ function vbStart() {
     S.sections.splice(at < 0 ? S.sections.length : at + 1, 0, { id: "work", visible: true, inNav: true, label: "Our work", eyebrow: "Recent work", heading: "Results we have delivered", intro: "A few projects and campaigns, with the numbers that mattered to the client." });
   }
   const sectionById = Object.fromEntries(S.sections.map(s => [s.id, s]));
-  const secLink = s => s.id === "bizcrt" ? '<a href="/bizcrt" data-biz="1">' + esc(s.label) + '</a>' : '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>';
+  const secLink = s => s.id === "apps" ? '<a href="/#apps" data-sec="apps">' + esc(s.label) + '</a>' : s.id === "bizcrt" ? '<a href="/bizcrt" data-biz="1">' + esc(s.label) + '</a>' : '<a href="/#' + esc(s.id) + '" data-sec="' + esc(s.id) + '">' + esc(s.label) + '</a>';
 
   function renderChrome() {
     $("logo").innerHTML = st.logo ? '<img class="logo-img" src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" width="87" height="56">'
@@ -161,12 +167,17 @@ function vbStart() {
     }
     // first visible block after the stats strip gets top spacing only
   }
+  function appsCoverBiz() { const a = sectionById.apps; return !!(a && a.visible && APPS.some(x => x.showOnHome !== false && isBizApp(x))); }
   function sectionHasContent(id) {
-    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, work: (S.work || []).length, bizcrt: S.bizcrt && S.bizcrt.showOnHome ? 1 : 0, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
+    return ({ stats: lines(st.stats).length, services: S.services.length, store: (S.products || []).length, work: (S.work || []).length, bizcrt: S.bizcrt && S.bizcrt.showOnHome && !appsCoverBiz() ? 1 : 0, apps: APPS.filter(a => a.showOnHome !== false).length, process: S.steps.length, reviews: S.testimonials.length, blog: S.posts.length, faq: S.faqs.length, contact: 1 })[id] > 0;
   }
 
   /* ---------- hero slider ---------- */
   let cur = 0;
+  if (APPS.length && !S.slides.some(s => s.visual === "apps")) {
+    S.slides.splice(Math.min(1, S.slides.length), 0, { eyebrow: "Our apps", title: "Software we build, for the way you work", text: APPS.map(a => a.name).join(", ").replace(/, ([^,]*)$/, " and $1") + ": video, WhatsApp, CRM and office tools made by our team.", cta: "Explore our apps", target: "custom link", link: "/#apps", visual: "apps" });
+  }
+  APPS.filter(a => a.showInSlider && !S.slides.some(s => s.visual === "app:" + a.slug)).forEach(a => S.slides.push({ eyebrow: a.name, title: a.slideTitle || a.tagline, text: a.slideText || a.summary, cta: "Explore " + a.name, target: "custom link", link: appHref(a), visual: "app:" + a.slug }));
   const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   function slideHref(s) {
     if (s.target === "custom link") return safeUrl(s.link);
@@ -177,10 +188,11 @@ function vbStart() {
     const slides = S.slides;
     $("slides").innerHTML = slides.length ? slides.map((s, i) => {
       const href = slideHref(s), ext = /^https?:/.test(href);
+      const appM = /^\/apps\/([\w-]+)$/.exec(href), appA = appM ? ' data-app="' + esc(appM[1]) + '"' : href === "/bizcrt" ? ' data-biz="1"' : "";
       return '<div class="slide' + (i === 0 ? " on" : "") + '" id="slide' + i + '" role="tabpanel" aria-roledescription="slide" aria-label="' + (i + 1) + ' of ' + slides.length + '"' + (i === 0 ? "" : ' aria-hidden="true"') + '>' +
         '<div class="slide-copy">' + (s.eyebrow ? '<div class="eyebrow">' + esc(s.eyebrow) + '</div>' : '') + (i === 0 ? '<h1>' : '<h2 class="h1">') + esc(s.title) + (i === 0 ? '</h1>' : '</h2>') + '<p>' + esc(s.text) + '</p>' +
-        '<div class="slide-ctas">' + (s.cta ? '<a class="btn btn-accent" href="' + esc(href) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(s.cta) + '</a>' : '') +
-        (s.cta2 ? '<a class="btn btn-ghost" href="/#services">' + esc(s.cta2) + '</a>' : '') + '</div></div>' +
+        '<div class="slide-ctas">' + (s.cta ? '<a class="btn btn-accent" href="' + esc(href) + '"' + appA + (ext ? ' target="_blank" rel="noopener"' : '') + '>' + esc(s.cta) + '</a>' : '') +
+        (s.cta2 ? '<a class="btn btn-ghost" href="' + esc(safeUrl(s.link2 || "/#services")) + '">' + esc(s.cta2) + '</a>' : '') + '</div></div>' +
         '<div class="slide-visual" aria-hidden="true">' + visual(s.visual, s) + '</div></div>';
     }).join("") : '<div class="slide on"><div class="slide-copy"><h1>' + esc(st.tagline) + '</h1></div></div>';
     $("dots").innerHTML = slides.map((s, i) => '<button class="dot' + (i === 0 ? " on" : "") + '" role="tab" aria-selected="' + (i === 0) + '" aria-controls="slide' + i + '" data-i="' + i + '"><span class="bar"><i></i></span><span class="lbl">' + esc(s.eyebrow || ("Slide " + (i + 1))) + '</span></button>').join("");
@@ -249,6 +261,7 @@ function vbStart() {
     const liveOffers = OFFERS.filter(o => offerState(o) === "live");
     $("fSvc").innerHTML = S.services.map(v => '<option>' + esc(v.name) + '</option>').join("") +
       (S.bizcrt ? '<option>' + esc((S.bizcrt.name || "BizCRT") + ": free demo") + '</option>' : '') +
+      (APPS.length ? '<optgroup label="Our apps">' + APPS.map(a => '<option>' + esc(("App: " + a.name).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       ((S.products || []).length ? '<optgroup label="Software">' + S.products.map(x => '<option>' + esc(("Product: " + x.name).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       (liveOffers.length ? '<optgroup label="Festival offers">' + liveOffers.map(o => '<option>' + esc(("Offer: " + o.title).slice(0, 120)) + '</option>').join("") + '</optgroup>' : '') +
       '<option>Not sure yet</option>';
@@ -258,6 +271,7 @@ function vbStart() {
     const social = lines(st.social).map(l => l.split("|")).filter(p => p[1]);
     $("foot").innerHTML = '<div class="foot-brand">' + (st.logo ? '<img src="' + esc(st.logo) + '" alt="' + esc(st.brand) + '" loading="lazy">' : '<b style="color:var(--ink);font-family:var(--display);font-size:18px">' + esc(st.brand) + '</b>') + (st.logoSub && !st.logo ? '<span class="foot-motto">' + esc(st.logoSub) + '</span>' : '') + '<span>' + esc(st.footer) + '</span><span>© ' + new Date().getFullYear() + ' ' + esc(st.brand) + '</span></div>' +
       '<div style="display:grid;gap:12px;justify-items:end"><nav aria-label="Footer">' + S.sections.filter(s => s.visible && s.inNav && sectionHasContent(s.id)).map(secLink).join("") + (sectionById.contact && sectionById.contact.visible ? '<a href="/#contact" data-sec="contact">Contact</a>' : '') + '</nav>' +
+      (APPS.length ? '<nav class="foot-apps" aria-label="Our apps"><span>Our apps</span>' + APPS.map(a => '<a href="' + esc(appHref(a)) + '"' + appData(a) + '>' + esc(a.name) + '</a>').join("") + '</nav>' : '') +
       (social.length ? '<div class="social">' + social.map(p => '<a href="' + esc(safeUrl(p[1].trim())) + '" target="_blank" rel="noopener">' + esc(p[0].trim()) + '</a>').join("") + '</div>' : '') + '</div>' +
       (L ? '<div class="foot-legal"><p>' + esc(L.tradeName || st.brand) + (L.legalName ? ' is a trade name of ' + esc(L.legalName) + (L.constitution ? ', ' + esc(L.constitution.toLowerCase()) : '') + '.' : '.') + (L.gstin ? ' <span>GSTIN <b class="lg-mono">' + esc(L.gstin) + '</b></span>' : '') + (L.address ? ' <span>' + esc(L.address) + '</span>' : '') + '</p><nav aria-label="Legal">' + Object.keys(LEGAL_PAGES).map(legalLink).join("") + '</nav></div>' : '');
   }
@@ -270,17 +284,25 @@ function vbStart() {
   function inline(t) {
     return esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, txt, url) => '<a href="' + esc(safeUrl(url.replace(/&amp;/g, "&"))) + '"' + (/^https?:/.test(url) ? ' target="_blank" rel="noopener"' : '') + '>' + txt + '</a>');
   }
+  // tiny markdown: ## heading, - bullets, **bold**, [text](link). A heading may sit directly above its paragraph or list.
   function mdLite(t) {
-    return String(t || "").split(/\n\s*\n/).map(b => {
-      b = b.trim(); if (!b) return "";
-      if (b.startsWith("## ")) return "<h2>" + inline(b.slice(3)) + "</h2>";
-      if (b.split("\n").every(l => l.trim().startsWith("- "))) return "<ul>" + b.split("\n").map(l => "<li>" + inline(l.trim().slice(2)) + "</li>").join("") + "</ul>";
-      return "<p>" + inline(b).replace(/\n/g, "<br>") + "</p>";
-    }).join("");
+    const out = [];
+    String(t || "").split(/\n\s*\n/).forEach(b => {
+      let ls = b.split("\n").map(l => l.trim()).filter(Boolean), para = [], list = [];
+      const flushP = () => { if (para.length) out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; };
+      const flushL = () => { if (list.length) out.push("<ul>" + list.map(l => "<li>" + inline(l) + "</li>").join("") + "</ul>"); list = []; };
+      ls.forEach(l => {
+        if (l.startsWith("## ")) { flushP(); flushL(); out.push("<h2>" + inline(l.slice(3)) + "</h2>"); }
+        else if (l.startsWith("- ")) { flushP(); list.push(l.slice(2)); }
+        else { flushL(); para.push(l); }
+      });
+      flushP(); flushL();
+    });
+    return out.join("");
   }
 
   /* ---------- page views: home, article, offer, product, BizCRT ---------- */
-  const VIEWS = ["homeView", "articleView", "offerView", "productView", "bizView", "legalView"];
+  const VIEWS = ["homeView", "articleView", "offerView", "productView", "bizView", "legalView", "appView"];
   function showOnly(id) { VIEWS.forEach(v => { const el = $(v); if (el) el.hidden = v !== id; }); }
   const offHome = () => VIEWS.slice(1).some(v => $(v) && !$(v).hidden);
 
@@ -305,7 +327,7 @@ function vbStart() {
   function legalBusiness() {
     const rows = [["Trade name", L.tradeName || st.brand], ["Legal name", L.legalName], ["Type of business", L.constitution], ["GSTIN", L.gstin], ["GST registered since", L.gstSince], ["Registration type", L.gstType], ["Registered address", L.address],
       ["Email", st.email && '<a href="mailto:' + esc(st.email) + '">' + esc(st.email) + '</a>'], ["Phone", st.phone && '<a href="tel:' + esc(st.phone.replace(/[^\d+]/g, "")) + '">' + esc(st.phone) + '</a>'],
-      ["WhatsApp", st.whatsapp && '<a href="' + esc(waLink("")) + '" target="_blank" rel="noopener">+' + esc(waNumber(st.whatsapp)) + '</a>'], ["Working hours", st.hours]];
+      ["WhatsApp", st.whatsapp && '<a href="' + esc(waLink("")) + '" target="_blank" rel="noopener">+' + esc(waNumber(st.whatsapp)) + '</a>'], ["Working hours", st.hours], ["Our products", APPS.length ? APPS.map(a => a.name + " (" + (a.category || "software") + ")").join(", ") : ""]];
     const html = k => ["Email", "Phone", "WhatsApp"].includes(k);
     return '<dl class="lg-facts">' + rows.filter(r => r[1]).map(r => '<div><dt>' + r[0] + '</dt><dd' + (r[0] === "GSTIN" ? ' class="lg-mono"' : '') + '>' + (html(r[0]) ? r[1] : esc(r[1]).replace(/\n/g, "<br>")) + '</dd></div>').join("") + '</dl>' +
       (L.certificate ? '<p><a class="btn btn-ghost-dark btn-small" href="' + esc(safeUrl(L.certificate)) + '" target="_blank" rel="noopener">View GST registration certificate (PDF)</a></p>' : '') +
@@ -315,12 +337,13 @@ function vbStart() {
     if (!L || !LEGAL_PAGES[slug]) return false;
     $("legalView").innerHTML = '<div class="wrap lg-wrap"><nav class="lg-nav" aria-label="Legal pages">' + Object.keys(LEGAL_PAGES).map(k => legalLink(k).replace("<a ", '<a' + (k === slug ? ' aria-current="page"' : '') + ' ')).join("") + '</nav>' +
       '<article class="article lg-doc"><h1>' + LEGAL_PAGES[slug] + '</h1>' + (L.updated ? '<p class="by">Last updated ' + fmtDate(L.updated) + '</p>' : '') +
-      (slug !== "business" ? '<p class="lg-who">' + esc(L.tradeName || st.brand) + (L.legalName ? ' is a trade name of ' + esc(L.legalName) + (L.constitution ? ' (' + esc(L.constitution.toLowerCase()) + ')' : '') : '') + (L.gstin ? ', GSTIN <span class="lg-mono">' + esc(L.gstin) + '</span>' : '') + '.</p>' : '') +
-      '<div class="article-body">' + (slug === "business" ? legalBusiness() : mdLite(L[slug])) + '</div></article></div>';
+      (slug !== "business" ? '<p class="lg-who">' + esc(L.tradeName || st.brand) + (L.legalName ? ' is a trade name of ' + esc(L.legalName) + (L.constitution ? ' (' + esc(L.constitution.toLowerCase()) + ')' : '') : '') + (L.gstin ? ', GSTIN <span class="lg-mono">' + esc(L.gstin) + '</span>' : '') + '.' + (APPS.length ? ' ' + esc(APPS.map(a => a.name).join(", ").replace(/, ([^,]*)$/, " and $1")) + (APPS.length > 1 ? ' are products of ' : ' is a product of ') + esc(L.tradeName || st.brand) + ', and this page covers them too.' : '') + '</p>' : '') +
+      '<div class="article-body">' + (slug === "business" ? legalBusiness() : mdLite(L[slug])) + '</div>' + legalApps(slug) + '</article></div>';
     showOnly("legalView");
     document.title = LEGAL_PAGES[slug] + " | " + st.brand;
     if (push) history.pushState({ legal: slug }, "", "/legal/" + slug);
-    window.scrollTo(0, 0); stopAuto();
+    if (location.hash && document.getElementById(location.hash.slice(1))) setTimeout(() => document.getElementById(location.hash.slice(1)).scrollIntoView(), 30); else window.scrollTo(0, 0);
+    stopAuto();
     return true;
   }
   function showHome(sectionId, push) {
@@ -333,7 +356,7 @@ function vbStart() {
   }
   window.addEventListener("popstate", () => {
     const m = /^\/blog\/([\w-]+)/.exec(location.pathname), mo = /^\/offer\/([\w-]+)/.exec(location.pathname), mp = /^\/product\/([\w-]+)/.exec(location.pathname);
-    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else if (/^\/bizcrt\/?$/i.test(location.pathname)) showBiz(false); else if (/^\/legal\/(\w+)/.test(location.pathname) && showLegal(/^\/legal\/(\w+)/.exec(location.pathname)[1], false)) { /* legal page */ } else showHome(location.hash.slice(1), false);
+    if (m) showPost(m[1], false); else if (mo) showOffer(mo[1], false); else if (mp) showProduct(mp[1], false); else if (/^\/bizcrt\/?$/i.test(location.pathname)) showBiz(false); else if (/^\/apps\/([\w-]+)/.test(location.pathname) && showApp(/^\/apps\/([\w-]+)/.exec(location.pathname)[1], false)) { /* app page */ } else if (/^\/legal\/(\w+)/.test(location.pathname) && showLegal(/^\/legal\/(\w+)/.exec(location.pathname)[1], false)) { /* legal page */ } else showHome(location.hash.slice(1), false);
   });
 
   /* ---------- enquiry forms (contact section and offer pages) ---------- */
@@ -780,6 +803,149 @@ function vbStart() {
       '<div class="bz-spot-visual">' + (BZ.screenshot ? '<img src="' + esc(BZ.screenshot) + '" alt="' + esc(bzName()) + ' app" loading="lazy">' : appMock()) + '</div></div>';
   }
 
+  /* ---------- our apps: home suite (#apps), app pages (/apps/slug), slides and legal notes ---------- */
+  function isBizApp(a) { return a.page === "/bizcrt" || a.slug === "bizcrt"; }
+  function appHref(a) { return isBizApp(a) && S.bizcrt ? "/bizcrt" : a.page && /^\//.test(a.page) ? a.page : "/apps/" + a.slug; }
+  function appData(a) { const h = appHref(a); return h === "/bizcrt" ? ' data-biz="1"' : /^\/apps\//.test(h) ? ' data-app="' + esc(a.slug) + '"' : ""; }
+  const appColor = a => /^#[0-9a-f]{6}$/i.test(a.color || "") ? a.color : "#F7941D";
+  const appMark = (a, cls) => a.logo ? '<img class="ap-logo' + (cls ? " " + cls : "") + '" src="' + esc(a.logo) + '" alt="" loading="lazy">' : '<span class="ap-mark' + (cls ? " " + cls : "") + '" aria-hidden="true">' + esc(a.mark || a.name.slice(0, 2)) + '</span>';
+  function appPlans(a) {
+    return lines(a.plans).map(l => {
+      const [name = "", price = "", period = "", note = "", flag = ""] = l.split("|").map(x => x.trim());
+      const num = /^[₹\s\d,.]+$/.test(price) && /\d/.test(price) ? Number(price.replace(/[^\d.]/g, "")) : null;
+      return { name, price: num, label: num === null ? (price || "On request") : num === 0 ? "₹0" : inr(num), period, note, hot: /popular|best|hot/i.test(flag) };
+    }).filter(p => p.name);
+  }
+  function appFrom(a) {
+    if (isBizApp(a) && BZ) { const f = fromPlan(); return f ? "Free plan · paid from " + rp(f) + "/month" : "Free plan to start"; }
+    const ps = appPlans(a), paid = ps.filter(p => p.price > 0), free = ps.some(p => p.price === 0);
+    if (!paid.length) return free ? "Free to start" : ps.length ? "Pricing on request" : "";
+    const low = paid.reduce((x, y) => (y.price < x.price ? y : x));
+    return (free ? "Free to start · " : "") + (paid.length > 1 ? "from " : "") + inr(low.price) + (low.period ? " " + low.period : "");
+  }
+  // live pictures of each app, drawn in HTML so they follow light and dark
+  function appVisual(kind, item) {
+    const k = kind === "apps" ? "apps" : kind.slice(4), a = APPS.find(x => x.slug === k) || item || {};
+    const v = kind === "apps" ? "apps" : (a.visual || k);
+    if (v === "apps") {
+      const sig = x => ({
+        vividora: '<span class="ap-sig"><span>Reel ready to approve</span><i class="ap-bar"><b style="width:100%"></b></i></span>',
+        bizcrt: '<span class="ap-sig"><span>12 new chats today</span><i class="ap-dots">' + "<b></b>".repeat(5) + '</i></span>',
+        relay: '<span class="ap-sig"><span>1,840 of 2,400 sent</span><i class="ap-bar"><b style="width:77%"></b></i></span>',
+        drishti: '<span class="ap-sig"><span>18 of 20 PCs active</span><i class="ap-grid">' + Array.from({ length: 20 }, (_, i) => '<b' + (i === 6 || i === 15 ? ' class="off"' : '') + '></b>').join("") + '</i></span>',
+      })[x.visual] || '<span class="ap-sig"><span>' + esc(x.category || "") + '</span></span>';
+      return '<div class="ap-suite-vis">' + APPS.slice(0, 4).map(x => '<div class="ap-tile" style="--app:' + appColor(x) + '">' + appMark(x) + '<b>' + esc(x.name) + '</b><small>' + esc(x.category || "") + '</small>' + sig(x) + '</div>').join("") + '</div>';
+    }
+    if (v === "bizcrt") return appMock();
+    if (v === "vividora") return '<div class="panel ap-vd"><div class="panel-h"><span>Diwali offer video <small>4:12</small></span><span class="pill">Ready to approve</span></div>' +
+      '<ol class="vd-steps">' + ["Voice cleaned", "38 silences and retakes cut", "Hindi captions added", "Rendered for YouTube, Shorts and Reels"].map(t => '<li>' + TICK1 + '<span>' + t + '</span></li>').join("") + '</ol>' +
+      '<div class="vd-plat">' + ["YouTube 16:9", "Shorts 9:16", "Reels 9:16", "Facebook"].map(t => '<span>' + t + '</span>').join("") + '</div>' +
+      '<div class="vd-wa"><p class="in">Your video is ready. Reply <b>ok 4821</b> to publish it.</p><p class="out">ok 4821</p><p class="in sys">Published to 3 platforms ✓</p></div></div>';
+    if (v === "relay") return '<div class="panel ap-re"><div class="panel-h"><span>Festive offer campaign <small>3 numbers</small></span><span class="pill live">Sending</span></div>' +
+      '<div class="funnel">' + [["Queued", 100, "2,400"], ["Sent", 77, "1,840"], ["Delivered", 75, "1,792"], ["Replied", 9, "214"]].map(r => '<div class="frow"><span>' + r[0] + '</span><span class="bar"><b style="width:' + r[1] + '%"></b></span><span>' + r[2] + '</span></div>').join("") + '</div>' +
+      '<div class="re-pace"><span>Safe pace</span><b>1 message every 30 to 60 seconds</b></div>' +
+      '<div class="re-api"><code>POST /api/messages</code><span>200 OK</span></div></div>';
+    if (v === "drishti") return '<div class="panel ap-dr"><div class="panel-h"><span>Korba office <small>live</small></span><span class="pill live">18 of 20 active</span></div><div class="dr-grid">' +
+      [["Neha", "Tally Prime", "on", 1], ["Arjun", "Excel", "on", 2], ["Pooja", "Chrome · GST portal", "on", 3], ["Ravi", "Idle 12 min", "idle", 4], ["Sana", "Outlook", "on", 2], ["Karan", "Offline", "off", 0]].map(c => '<div class="dr-pc"><div class="dr-scr s' + c[3] + '"></div><div class="dr-meta"><i class="dr-dot ' + c[2] + '"></i><b>' + c[0] + '</b><small>' + c[1] + '</small></div></div>').join("") +
+      '</div><div class="dr-foot"><span><b>78</b>team score today</span><span><b>9:24</b>average start</span><span class="dr-remote">Remote access</span></div><div class="small-note">Sample dashboard. Names and numbers are illustrative.</div></div>';
+    return visual("software", a);
+  }
+  function renderApps() {
+    const el = $("appSuite"); if (!el) return;
+    const list = APPS.filter(a => a.showOnHome !== false);
+    if (!list.length) { el.innerHTML = ""; return; }
+    el.innerHTML = '<div class="ap-tabs" role="tablist" aria-label="Our apps">' + list.map((a, i) => '<button type="button" role="tab" class="ap-tab" id="apTab' + i + '" aria-controls="apPanel" aria-selected="' + (i === 0) + '" tabindex="' + (i === 0 ? 0 : -1) + '" data-i="' + i + '" style="--app:' + appColor(a) + '">' + appMark(a) + '<span><b>' + esc(a.name) + '</b><small>' + esc(a.category || "") + '</small></span></button>').join("") + '</div>' +
+      '<div class="ap-panel" id="apPanel" role="tabpanel" aria-live="polite"></div>';
+    const draw = i => {
+      const a = list[i], pts = lines(a.features).slice(0, 4), from = appFrom(a), ext = a.ctaUrl && /^https?:/.test(a.ctaUrl);
+      $("apPanel").style.setProperty("--app", appColor(a)); $("apPanel").setAttribute("aria-labelledby", "apTab" + i);
+      $("apPanel").innerHTML = '<div class="ap-copy"><div class="ap-meta"><span class="ap-status' + (/live/i.test(a.status) ? " live" : "") + '">' + esc(a.status || "Live") + '</span><span>' + esc(a.category || "") + '</span></div>' +
+        '<h3>' + esc(a.tagline) + '</h3><p>' + esc(a.summary) + '</p><ul>' + pts.map(f => '<li>' + TICK1 + '<span>' + esc(f) + '</span></li>').join("") + '</ul>' +
+        (from ? '<p class="ap-from">' + esc(from) + '</p>' : '') +
+        '<div class="offer-ctas"><a class="btn btn-accent" href="' + esc(appHref(a)) + '"' + appData(a) + '>Explore ' + esc(a.name) + '</a>' +
+        (ext ? '<a class="btn btn-ghost" href="' + esc(safeUrl(a.ctaUrl)) + '" target="_blank" rel="noopener">' + esc(a.ctaLabel || "Get started") + '</a>' : '') + '</div></div>' +
+        '<div class="ap-vis" aria-hidden="true">' + appVisual("app:" + a.slug, a) + '</div>';
+      el.querySelectorAll(".ap-tab").forEach((b, k) => { b.setAttribute("aria-selected", k === i); b.tabIndex = k === i ? 0 : -1; });
+    };
+    draw(0);
+    el.querySelector(".ap-tabs").addEventListener("click", e => { const b = e.target.closest(".ap-tab"); if (b) draw(+b.dataset.i); });
+    el.querySelector(".ap-tabs").addEventListener("keydown", e => {
+      const tabs = [...el.querySelectorAll(".ap-tab")], at = tabs.indexOf(document.activeElement); if (at < 0) return;
+      const to = e.key === "ArrowRight" || e.key === "ArrowDown" ? at + 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? at - 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : null;
+      if (to === null) return; e.preventDefault(); const n = (to + tabs.length) % tabs.length; draw(n); tabs[n].focus();
+    });
+  }
+  function showApp(slug, push) {
+    const a = APPS.find(x => x.slug === slug);
+    if (!a) return false;
+    if (isBizApp(a) && BZ) return showBiz(push);
+    const plans = appPlans(a), feats = lines(a.features), who = lines(a.whoFor), faqs = pairs(a.faqs), from = appFrom(a);
+    const ext = a.ctaUrl && /^https?:/.test(a.ctaUrl), prod = a.product && PRODUCTS.find(x => x.slug === a.product);
+    const service = "App: " + a.name;
+    const planBtn = (p, i) => {
+      const cls = "btn " + (p.hot || plans.length === 1 ? "btn-accent" : "btn-ghost-dark") + " plan-buy";
+      if (p.price === 0 && ext) return '<a class="' + cls + '" href="' + esc(safeUrl(a.ctaUrl)) + '" target="_blank" rel="noopener">Start free</a>';
+      if (p.price > 0 && prod) return '<a class="' + cls + '" href="/product/' + esc(prod.slug) + '" data-product="' + esc(prod.slug) + '">Buy ' + esc(p.name) + '</a>';
+      return '<a class="' + cls + '" href="#appEnq" data-appplan="' + i + '">' + (p.price === null ? "Ask for a quote" : p.price === 0 ? "Get started free" : "Get " + esc(p.name)) + '</a>';
+    };
+    const POL = [["terms", "Terms"], ["privacy", "Privacy"], ["refunds", "Refunds and cancellation"], ["delivery", "Delivery"]].filter(x => L && a["legal" + x[0][0].toUpperCase() + x[0].slice(1)]);
+    $("appView").innerHTML =
+      '<section class="prod-hero ap-hero" style="--app:' + appColor(a) + '"><div class="wrap prod-hero-grid"><div class="prod-copy">' +
+        '<a class="back-link" href="/#apps" data-sec="apps">← All our apps</a>' +
+        '<div class="ap-brand">' + appMark(a, "lg") + '<span><b>' + esc(a.name) + '</b><small>by ' + esc(st.brand) + '</small></span><span class="ap-status' + (/live/i.test(a.status) ? " live" : "") + '">' + esc(a.status || "Live") + '</span></div>' +
+        '<h1>' + esc(a.tagline) + '</h1>' + (a.summary ? '<p>' + esc(a.summary) + '</p>' : '') +
+        '<div class="offer-ctas">' + (ext ? '<a class="btn btn-accent" href="' + esc(safeUrl(a.ctaUrl)) + '" target="_blank" rel="noopener">' + esc(a.ctaLabel || "Get started") + '</a>' : '<a class="btn btn-accent" href="#appEnq" data-jump="appEnq">' + esc(a.ctaLabel || "Talk to us") + '</a>') +
+          (plans.length ? '<a class="btn btn-ghost" href="#appPlans" data-jump="appPlans">See plans and prices</a>' : '') + '</div>' +
+        (from ? '<p class="prod-from">' + esc(from) + '</p>' : '') +
+      '</div><div class="prod-visual ap-hero-vis" aria-hidden="true">' + (a.screenshot ? '<img src="' + esc(a.screenshot) + '" alt="">' : appVisual("app:" + a.slug, a)) + '</div></div></section>' +
+      '<div class="wrap prod-body ap-body" style="--app:' + appColor(a) + '">' +
+        (feats.length ? '<section class="prod-feats"><h2>What ' + esc(a.name) + ' does</h2><ul class="offer-points">' + feats.map(f => '<li>' + TICK + '<span>' + esc(f) + '</span></li>').join("") + '</ul></section>' : '') +
+        (who.length ? '<section class="bz-who"><h2>Made for</h2><div>' + who.map(w => '<span>' + esc(w) + '</span>').join("") + '</div></section>' : '') +
+        (plans.length ? '<section id="appPlans" class="plans-wrap"><div class="sec-head"><div><div class="eyebrow">Pricing</div><h2>Plans and prices</h2></div><p>' + esc(a.priceNote || "") + '</p></div>' +
+          '<div class="plans" style="--n:' + Math.min(plans.length, 4) + '">' + plans.map((p, i) => '<div class="plan' + (p.hot ? " hot" : "") + '">' + (p.hot ? '<span class="plan-flag">Most popular</span>' : '') +
+            '<h3>' + esc(p.name) + '</h3><div class="plan-price"><b' + (p.price === null ? ' class="txt"' : '') + '>' + esc(p.label) + '</b><span>' + esc(p.period) + '</span></div>' +
+            (p.note ? '<p class="plan-note">' + esc(p.note) + '</p>' : '') + planBtn(p, i) + '</div>').join("") + '</div>' +
+          '<p class="pay-note"><span class="lock" aria-hidden="true">🔒</span> Pay securely by Razorpay: UPI, cards, netbanking and wallets. You get a GST invoice by email.</p></section>' : '') +
+        (faqs.length ? '<section><div class="sec-head"><div><div class="eyebrow">FAQ</div><h2>Questions about ' + esc(a.name) + '</h2></div><p></p></div><div class="faq">' + faqs.map(([q, x]) => '<details><summary>' + esc(q) + '</summary><p>' + esc(x) + '</p></details>').join("") + '</div></section>' : '') +
+        (POL.length ? '<section class="ap-pol"><h2>Policies for ' + esc(a.name) + '</h2><p>What applies when you buy or use ' + esc(a.name) + ', on the same pages as the rest of ' + esc(st.brand) + '.</p><div>' + POL.map(x => '<a href="/legal/' + x[0] + '#app-' + esc(a.slug) + '" data-legal="' + x[0] + '" data-legal-hash="app-' + esc(a.slug) + '">' + x[1] + '</a>').join("") + (a.policyUrl ? '<a href="' + esc(safeUrl(a.policyUrl)) + '" target="_blank" rel="noopener">Full ' + esc(a.name) + ' policies ↗</a>' : '') + '</div></section>' : '') +
+        '<section class="contact bz-demo" id="appEnq"><div class="contact-copy"><div class="eyebrow">' + esc(a.name) + '</div><h2>' + (plans.some(p => p.price === null) || !plans.length ? "Get a quotation for your business" : "Get " + esc(a.name) + " set up") + '</h2><p>Share your details and our team will call you, answer your questions and send a secure payment link for the plan you choose.</p>' +
+          '<div class="offer-ctas">' + (st.whatsapp ? '<a class="btn btn-ghost" href="' + esc(waLink("Hi " + st.brand + ", I want to know more about " + a.name + ".")) + '" target="_blank" rel="noopener">Ask on WhatsApp</a>' : '') + (st.phone ? '<a class="btn btn-ghost" href="tel:' + esc(st.phone.replace(/[^\d+]/g, "")) + '">Call ' + esc(st.phone) + '</a>' : '') + '</div></div>' +
+          '<form class="form" id="appForm" novalidate><div class="two"><label>Your name<input name="name" autocomplete="name" required></label><label>Phone / WhatsApp<input name="phone" type="tel" inputmode="tel" autocomplete="tel" required></label></div>' +
+          '<div class="two"><label><span>Business name <small>optional</small></span><input name="business" autocomplete="organization"></label><label><span>City <small>optional</small></span><input name="city" autocomplete="address-level2"></label></div>' +
+          '<label><span>What do you need? <small>optional</small></span><textarea name="message" rows="3" id="appMsg"></textarea></label>' +
+          '<label class="optin"><input type="checkbox" name="opt_in" value="yes"> Send me updates and offers on WhatsApp</label><label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>' +
+          '<div><button class="btn btn-accent" type="submit">Send my enquiry</button></div><div class="form-out" aria-live="polite"></div></form></section>' +
+      '</div>';
+    bindLeadForm($("appForm"), { service, success: "Thanks! Our team will call you about " + a.name + " soon." });
+    $("appView").onclick = e => {
+      const b = e.target.closest("[data-appplan]"); if (!b) return;
+      e.preventDefault(); const p = plans[+b.dataset.appplan];
+      $("appMsg").value = "I'm interested in the " + p.name + " plan" + (p.price > 0 ? " (" + p.label + (p.period ? " " + p.period : "") + ")" : "") + ".";
+      $("appEnq").scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); setTimeout(() => $("appForm").querySelector("input").focus({ preventScroll: true }), 400);
+    };
+    showOnly("appView");
+    document.title = a.name + ": " + (a.category || a.tagline) + " | " + st.brand;
+    if (push) history.pushState({ app: slug }, "", "/apps/" + slug);
+    window.scrollTo(0, 0); stopAuto();
+    return true;
+  }
+  // product notes on the legal pages: one block per app, linkable as /legal/<page>#app-<slug>
+  const LEGAL_KEY = { terms: "legalTerms", privacy: "legalPrivacy", refunds: "legalRefunds", delivery: "legalDelivery" };
+  const LEGAL_INTRO = {
+    terms: "These terms also apply when you buy or use our own software. The extra terms below apply to each product.",
+    privacy: "Our software products handle data in different ways. Here is what each one collects, where it is stored and who controls it.",
+    refunds: "Refunds for our software products follow the rules above, with these product-specific terms. Approved refunds go back to the original payment method within 5 to 7 working days.",
+    delivery: "All our software is delivered online. Here is how and when each product is activated or installed after payment.",
+  };
+  function legalApps(slug) {
+    const k = LEGAL_KEY[slug], list = k ? APPS.filter(a => a[k]) : [];
+    if (!list.length) return "";
+    return '<section class="lg-apps" aria-labelledby="lgApps"><h2 id="lgApps">Our software products</h2><p>' + LEGAL_INTRO[slug] + '</p>' +
+      '<nav class="lg-toc" aria-label="Products on this page">' + list.map(a => '<a href="#app-' + esc(a.slug) + '" style="--app:' + appColor(a) + '">' + appMark(a, "sm") + esc(a.name) + '</a>').join("") + '</nav>' +
+      list.map(a => '<div class="lg-app" id="app-' + esc(a.slug) + '" style="--app:' + appColor(a) + '"><h3>' + appMark(a, "sm") + esc(a.name) + (a.category ? ' <small>' + esc(a.category) + '</small>' : '') + '</h3><div class="article-body">' + mdLite(a[k]) + '</div>' +
+        '<p class="lg-app-links"><a href="' + esc(appHref(a)) + '"' + appData(a) + '>About ' + esc(a.name) + '</a>' + (a.policyUrl ? '<a href="' + esc(safeUrl(a.policyUrl)) + '" target="_blank" rel="noopener">Full ' + esc(a.name) + ' policies ↗</a>' : '') + '</p></div>').join("") + '</section>';
+  }
+
   /* ---------- events ---------- */
   document.addEventListener("click", e => {
     const a = e.target.closest("a");
@@ -787,8 +953,9 @@ function vbStart() {
     if (a.dataset.post) { e.preventDefault(); showPost(a.dataset.post, true); return; }
     if (a.dataset.offer) { e.preventDefault(); showOffer(a.dataset.offer, true); return; }
     if (a.dataset.product) { e.preventDefault(); showProduct(a.dataset.product, true); return; }
-    if (a.dataset.legal && L) { e.preventDefault(); showLegal(a.dataset.legal, true); return; }
+    if (a.dataset.legal && L) { e.preventDefault(); if (a.dataset.legalHash) history.pushState({ legal: a.dataset.legal }, "", "/legal/" + a.dataset.legal + "#" + a.dataset.legalHash); showLegal(a.dataset.legal, !a.dataset.legalHash); return; }
     if (a.dataset.biz) { e.preventDefault(); showBiz(true); return; }
+    if (a.dataset.app) { e.preventDefault(); showApp(a.dataset.app, true); return; }
     if (a.dataset.jump) { e.preventDefault(); const el = document.getElementById(a.dataset.jump); if (el) { el.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); const f = el.querySelector("input"); if (f) setTimeout(() => f.focus({ preventScroll: true }), 400); } return; }
     if (a.dataset.sec === "top") { e.preventDefault(); showHome("", true); window.scrollTo(0, 0); return; }
     if (a.dataset.sec || (a.getAttribute("href") || "").startsWith("/#")) {
@@ -821,11 +988,12 @@ function vbStart() {
   window.addEventListener("resize", setStepCols);
 
   /* ---------- boot ---------- */
-  renderChrome(); renderHero(); renderSections(); renderOffers(); renderStore(); renderBizSpotlight(); renderWidget();
+  renderChrome(); renderHero(); renderSections(); renderOffers(); renderStore(); renderBizSpotlight(); renderApps(); renderWidget();
   if (window.__POST__ && showPost(window.__POST__, false)) { /* article view */ }
   else if (window.__PRODUCT__ && showProduct(window.__PRODUCT__, false)) { /* product page */ }
   else if (window.__BIZ__ && showBiz(false)) { /* BizCRT page */ }
   else if (window.__LEGAL__ && showLegal(window.__LEGAL__, false)) { /* legal page */ }
+  else if (window.__APP__ && showApp(window.__APP__, false)) { /* app page */ }
   else if (window.__OFFER__ && showOffer(window.__OFFER__, false)) { /* offer page */ }
   else { startAuto(); if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) setTimeout(() => el.scrollIntoView(), 50); } }
   // back from a Razorpay payment link

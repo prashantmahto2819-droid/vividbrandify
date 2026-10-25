@@ -30,6 +30,8 @@ From then on, every change pushed to `main` goes live automatically within about
 | `admin/` | Admin panel (content editor, offers, leads, messaging, team) |
 | `supabase/schema-notes.sql` | Notes on the database tables, access rules and functions |
 | `docs/SETUP-GUIDE.md` | First-time setup, domain, and the "Turn on delete" SQL |
+| `assets/apps.json` | Our apps (Vividora, BizCRT, Vivid Relay, Drishti): plans and per-app legal text, until edited in Admin → Store → Our apps |
+| `docs/CODEBASE-SUMMARY.md` | **Complete codebase summary and changelog.** Start here. |
 
 ## WhatsApp automation (BotCommerce)
 

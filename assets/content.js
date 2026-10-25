@@ -26,6 +26,7 @@
       bizcrt: c.bizcrt.published ? Object.assign({}, c.bizcrt, { live: c.bizLive || null }) : null,
       work: c.work.filter(x => x.active),
       legal: c.legal.published ? c.legal : null,
+      apps: (c.apps || []).filter(a => a && a.published !== false && a.slug && a.name),
       widget: c.widget.mode === "built-in" ? Object.assign({}, c.widget, { customCode: undefined }) : { mode: c.widget.mode },
     };
   }
@@ -64,6 +65,7 @@
   };
   async function load() {
     const c = await fetchContent();
+    if (!Array.isArray(c.apps)) c.apps = await fetch("/assets/apps.json").then(r => r.ok ? r.json() : []).catch(() => []);
     if (c.bizcrt.published && c.bizcrt.livePricing !== false) {
       const get = q => fetch(CFG.url + "/rest/v1/" + q, { headers: { apikey: CFG.key } }).then(r => r.ok ? r.json() : []).catch(() => []);
       const [plans, modules, addons] = await Promise.all([get(BIZ_Q.plans), get(BIZ_Q.modules), get(BIZ_Q.addons)]);
@@ -95,6 +97,8 @@
     window.__BIZ__ = /^\/bizcrt\/?$/i.test(location.pathname);
     const ml = /^\/legal\/(terms|privacy|refunds|delivery|business)\/?$/.exec(location.pathname);
     window.__LEGAL__ = ml ? ml[1] : null;
+    const ma = /^\/apps\/([\w-]+)\/?$/.exec(location.pathname);
+    window.__APP__ = ma ? ma[1] : null;
     return toPublic(c);
   }
 

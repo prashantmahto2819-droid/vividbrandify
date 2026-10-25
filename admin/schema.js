@@ -19,7 +19,7 @@ const SCHEMA = {
       ['target', 'select', 'Main button goes to', { choices: ['contact', 'services', 'process', 'reviews', 'blog', 'whatsapp', 'custom link'] }],
       ['link', 'text', 'Custom link', { hint: 'Used when "custom link" is chosen, e.g. https://… or /blog/…' }],
       ['cta2', 'text', 'Second button label', { hint: 'Optional outline button that goes to Services' }],
-      ['visual', 'select', 'Visual', { choices: ['chat', 'voice', 'software', 'video', 'growth', 'website', 'crm', 'image'], hint: 'Pick "image" to show the uploaded image' }],
+      ['visual', 'select', 'Visual', { choices: ['chat', 'voice', 'software', 'video', 'growth', 'website', 'crm', 'apps', 'image'], hint: 'Pick "image" to show the uploaded image, or "apps" for the four-app tiles. The site adds an "Our apps" slide by itself unless one slide uses "apps"' }],
       ['image', 'image', 'Slide image'],
     ],
     blank: { active: true, eyebrow: 'New', title: 'New slide headline', text: '', cta: 'Contact us', target: 'contact', link: '', cta2: 'All services', visual: 'chat', image: '' },
@@ -140,6 +140,44 @@ const SCHEMA = {
       ['demo', 'check', 'Show a "Book a free demo" button'],
     ],
     blank: { published: false, plans: '', icon: 'software', demo: true },
+  },
+  apps: {
+    kind: 'list', group: 'Store', label: 'Our apps', noun: 'app', titleField: 'name',
+    help: 'Your own products: Vividora, BizCRT, Vivid Relay, Drishti and any you add. Each app shows in the "Our apps" tabs on the home page, gets a page at /apps/your-slug, a link in the footer, and its own section on the Terms, Privacy, Refund and Delivery pages (Razorpay checks these). To take payment online, create a product under Store → Products & plans and put its slug in "Store product".',
+    fields: [
+      ['published', 'check', 'Published', { hint: 'Untick to hide the app everywhere, including the legal pages' }],
+      ['showOnHome', 'check', 'Show in the "Our apps" tabs on the home page'],
+      ['showInSlider', 'check', 'Add its own slide to the hero slider'],
+      ['name', 'text', 'App name'],
+      ['slug', 'text', 'URL slug', { hint: 'Page address: /apps/your-slug' }],
+      ['category', 'text', 'Category', { hint: 'Short label, e.g. AI video studio' }],
+      ['status', 'select', 'Status', { choices: ['Live', 'Early access', 'Coming soon'] }],
+      ['mark', 'text', 'Two-letter mark', { hint: 'Shown in the coloured square when there is no logo, e.g. Vd', max: 3 }],
+      ['color', 'color', 'App colour'],
+      ['logo', 'image', 'App logo', { hint: 'Optional. Square PNG' }],
+      ['screenshot', 'image', 'Screenshot', { hint: 'Optional. Replaces the drawn preview on the app page' }],
+      ['visual', 'select', 'Drawn preview', { choices: ['vividora', 'bizcrt', 'relay', 'drishti', 'software'] }],
+      ['tagline', 'text', 'One-line pitch', { hint: 'The headline on the app page and in the tabs' }],
+      ['summary', 'textarea', 'What it is'],
+      ['features', 'lines', 'Features', { hint: 'One per line. The first four show on the home page' }],
+      ['whoFor', 'lines', 'Made for', { hint: 'One business type per line' }],
+      ['plans', 'lines', 'Plans and prices', { hint: 'One plan per line: Plan name | price | period | note | popular.  e.g.  Growth | 1299 | per 30 days | 3 numbers | popular.  Use 0 for free, or words like "On request"' }],
+      ['priceNote', 'textarea', 'Note under the prices'],
+      ['product', 'text', 'Store product', { hint: 'Optional. Slug of a product under Store → Products & plans; its plans then get a Buy button with Razorpay checkout' }],
+      ['ctaLabel', 'text', 'Main button label'],
+      ['ctaUrl', 'text', 'Main button link', { hint: 'Optional. The app\'s own sign-up page, e.g. https://relay.vividbrandify.com. Empty: the button opens the enquiry form' }],
+      ['page', 'text', 'Use another page instead', { hint: 'Optional, e.g. /bizcrt. Links to this app then go there' }],
+      ['url', 'text', 'App website'],
+      ['faqs', 'lines', 'FAQ', { hint: 'One per line: Question|Answer' }],
+      ['slideTitle', 'text', 'Slide headline'],
+      ['slideText', 'textarea', 'Slide text'],
+      ['policyUrl', 'text', 'Full policies link', { hint: 'Optional. If the app has its own policy pages' }],
+      ['legalTerms', 'tall', 'Terms for this app', { hint: 'Shown under "Our software products" on /legal/terms. Blank line between paragraphs' }],
+      ['legalPrivacy', 'tall', 'Privacy for this app', { hint: 'What the app collects, where it is stored and who controls it. Shown on /legal/privacy' }],
+      ['legalRefunds', 'tall', 'Refunds for this app', { hint: 'Shown on /legal/refunds' }],
+      ['legalDelivery', 'tall', 'Delivery for this app', { hint: 'How and when it is activated or installed. Shown on /legal/delivery' }],
+    ],
+    blank: { published: false, showOnHome: true, showInSlider: false, status: 'Live', color: '#F7941D', visual: 'software', plans: '' },
   },
   sections: {
     kind: 'list', group: 'Layout', label: 'Sections & menu', noun: 'section', titleField: 'label', fixed: true,
@@ -284,7 +322,7 @@ const SCHEMA = {
   },
 };
 
-const SECTION_IDS = ['stats', 'services', 'bizcrt', 'store', 'work', 'process', 'reviews', 'blog', 'faq', 'contact'];
+const SECTION_IDS = ['stats', 'services', 'apps', 'bizcrt', 'store', 'work', 'process', 'reviews', 'blog', 'faq', 'contact'];
 const IMAGE_RE = /^(\/uploads\/[A-Za-z0-9._-]+|\/assets\/[A-Za-z0-9._\/-]+|https:\/\/[^\s"'<>]+)$/;
 
 function slugify(s) {
@@ -332,7 +370,7 @@ function sanitize(key, value, previous) {
     for (const p of previous || []) if (!byId.has(p.id)) byId.set(p.id, p);
     items = [...byId.values()];
   }
-  if (key === 'posts' || key === 'offers' || key === 'products') {
+  if (key === 'posts' || key === 'offers' || key === 'products' || key === 'apps') {
     const seen = new Set();
     for (const p of items) {
       let s = slugify(p.slug || p.title || p.name), base = s, n = 2;
